@@ -13,9 +13,16 @@
 #include <asm/mach/map.h>
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
-#include <mach/memory.h>
-#include <plat/sram.h>
 
+//#include <plat/memory.h>
+//#include <plat/sram.h>
+//#include <linux/slab.h>
+//#include <plat/rk29_iomap.h>
+
+#include <plat/memory.h>
+#include <plat/rk29_iomap.h>
+#include <plat/sram.h>
+#include <plat/cru.h>
 
 /* SRAM section definitions from the linker */
 extern char __sram_code_start, __ssram_code_text, __esram_code_text;
@@ -87,4 +94,12 @@ void __sramfunc sram_printhex(unsigned int hex)
 		sram_printch(c < 0xa ? c + '0' : c - 0xa + 'a');
 		hex <<= 4;
 	}
+}
+
+void cru_set_soft_reset(enum cru_soft_reset idx, bool on)
+{
+	const void __iomem *reg = RK30_CRU_BASE + CRU_SOFTRSTS_CON(idx >> 4);
+	u32 val = on ? 0x10001U << (idx & 0xf) : 0x10000U << (idx & 0xf);
+	writel_relaxed(val, reg);
+	dsb();
 }

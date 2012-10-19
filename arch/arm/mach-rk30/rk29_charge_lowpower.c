@@ -16,6 +16,8 @@
 #include <linux/io.h>
 #include <mach/gpio.h>
 
+// Omegamoon: added ddr.h to fix error "undefined reference to `ddr_set_auto_self_refresh'"
+#include <mach/ddr.h>
 
 
 #define CHARGE_EARLYSUSPEND 0

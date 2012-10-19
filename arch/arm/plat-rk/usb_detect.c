@@ -2,7 +2,7 @@
 #include <linux/workqueue.h>
 #include <linux/interrupt.h>
 #include <linux/gpio.h>
-#include <mach/board.h>
+#include <plat/board.h>
 
 static irqreturn_t usb_detect_irq_handler(int irq, void *dev_id);
 static int detect_gpio = INVALID_GPIO;
