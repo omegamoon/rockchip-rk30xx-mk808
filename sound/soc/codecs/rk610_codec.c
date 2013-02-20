@@ -817,6 +817,14 @@ static int rk610_codec_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 
+static int rk610_codec_i2c_shutdown(struct i2c_client *client)
+{
+	spk_ctrl_fun(GPIO_LOW);
+	snd_soc_unregister_codec(&client->dev);
+	kfree(i2c_get_clientdata(client));
+	return 0;
+}
+
 static const struct i2c_device_id rk610_codec_i2c_id[] = {
 	{ "rk610_i2c_codec", 0 },
 	{ }
@@ -831,6 +839,7 @@ static struct i2c_driver rk610_codec_i2c_driver = {
 	},
 	.probe = rk610_codec_i2c_probe,
 	.remove = rk610_codec_i2c_remove,
+	.shutdown = rk610_codec_i2c_shutdown,
 	.id_table = rk610_codec_i2c_id,
 };
 #endif

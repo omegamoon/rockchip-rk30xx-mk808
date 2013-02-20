@@ -336,6 +336,8 @@ struct wm831x_isink {
 int wm831x_reg_read(struct wm831x *wm831x, unsigned short reg);
 int wm831x_reg_write(struct wm831x *wm831x, unsigned short reg,
 		 unsigned short val);
+int wm831x_reg_muti_write(struct wm831x *wm831x, unsigned short reg,
+		     unsigned short *val, int len);
 void wm831x_reg_lock(struct wm831x *wm831x);
 int wm831x_reg_unlock(struct wm831x *wm831x);
 int wm831x_set_bits(struct wm831x *wm831x, unsigned short reg,

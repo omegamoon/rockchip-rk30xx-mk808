@@ -20,3 +20,5 @@ Linux kernel release 3.x for Rockchip RK3066 - www.omegamoon.com
 - Added mk808 build script
 - Added linux flash tools + flash script for mk808 (use at own risk!)
 - Updated README and added build- and flash instructions
+
+- Merged with EasyPad 971 kernel snapshot (i97-8326-1.5)

@@ -17,6 +17,56 @@ do{\
 		dev_printk(KERN_ERR , dev , format , ## arg);\
 }while(0)
 
+#define RK610_CONTROL_REG_C_PLL_CON0	0x00
+#define RK610_CONTROL_REG_C_PLL_CON1	0x01
+#define RK610_CONTROL_REG_C_PLL_CON2	0x02
+#define RK610_CONTROL_REG_C_PLL_CON3	0x03
+#define RK610_CONTROL_REG_C_PLL_CON4	0x04
+#define RK610_CONTROL_REG_C_PLL_CON5	0x05
+	#define C_PLL_DISABLE_FRAC		1 << 0
+	#define C_PLL_BYPSS_ENABLE		1 << 1
+	#define C_PLL_POWER_ON			1 << 2
+	#define C_PLL_LOCLED			1 << 7
+	
+#define RK610_CONTROL_REG_TVE_CON		0x29
+	#define TVE_CONTROL_VDAC_R_BYPASS_ENABLE	1 << 7
+	#define TVE_CONTROL_VDAC_R_BYPASS_DISABLE	0 << 7
+	#define TVE_CONTROL_CVBS_3_CHANNEL_ENALBE	1 << 6
+	#define TVE_CONTROL_CVBS_3_CHANNEL_DISALBE	0 << 5
+enum {
+	INPUT_DATA_FORMAT_RGB888 = 0,
+	INPUT_DATA_FORMAT_RGB666,
+	INPUT_DATA_FORMAT_RGB565,
+	INPUT_DATA_FORMAT_YUV
+};
+	#define RGB2CCIR_INPUT_DATA_FORMAT(n)	n << 4
+	
+	#define RGB2CCIR_RGB_SWAP_ENABLE		1 << 3
+	#define RGB2CCIR_RGB_SWAP_DISABLE		0 << 3
+	
+	#define RGB2CCIR_INPUT_INTERLACE		1 << 2
+	#define RGB2CCIR_INPUT_PROGRESSIVE		0 << 2
+	
+	#define RGB2CCIR_CVBS_PAL				0 << 1
+	#define RGB2CCIR_CVBS_NTSC				1 << 1
+	
+	#define RGB2CCIR_DISABLE				0
+	#define RGB2CCIR_ENABLE					1
+	
+#define RK610_CONTROL_REG_CCIR_RESET	0x2a
+
+#define RK610_CONTROL_REG_CLOCK_CON0	0x2b
+#define RK610_CONTROL_REG_CLOCK_CON1	0x2c
+	#define CLOCK_CON1_I2S_CLK_CODEC_PLL	1 << 5
+	#define CLOCK_CON1_I2S_DVIDER_MASK		0x1F
+#define RK610_CONTROL_REG_CODEC_CON		0x2d
+	#define CODEC_CON_BIT_HDMI_BLCK_INTERANL		1<<4
+	#define CODEC_CON_BIT_DAC_LRCL_OUTPUT_DISABLE	1<<3
+	#define CODEC_CON_BIT_ADC_LRCK_OUTPUT_DISABLE	1<<2
+	#define CODEC_CON_BIT_INTERAL_CODEC_DISABLE		1<<0
+
+#define RK610_CONTROL_REG_I2C_CON		0x2e
+
 /********************************************************************
 **                          结构定义                                *
 ********************************************************************/
@@ -28,11 +78,7 @@ do{\
 #define C_PLL_CON3      0x03
 #define C_PLL_CON4      0x04
 #define C_PLL_CON5      0x05
-	#define C_PLL_DISABLE_FRAC		1 << 0
-	#define C_PLL_BYPSS_ENABLE		1 << 1
-	#define C_PLL_POWER_ON			1 << 2
-	#define C_PLL_LOCLED			1 << 7
-	
+
 /*  SCALER PLL REG */
 #define S_PLL_CON0      0x06
 #define S_PLL_CON1      0x07
@@ -78,49 +124,23 @@ do{\
 
 /*  TVE REG  */
 #define TVE_CON         0x29
-	#define TVE_CONTROL_VDAC_R_BYPASS_ENABLE	1 << 7
-	#define TVE_CONTROL_VDAC_R_BYPASS_DISABLE	0 << 7
-	#define TVE_CONTROL_CVBS_3_CHANNEL_ENALBE	1 << 6
-	#define TVE_CONTROL_CVBS_3_CHANNEL_DISALBE	0 << 5
-	
-	enum {
-		INPUT_DATA_FORMAT_RGB888 = 0,
-		INPUT_DATA_FORMAT_RGB666,
-		INPUT_DATA_FORMAT_RGB565,
-		INPUT_DATA_FORMAT_YUV
-	};
-	#define RGB2CCIR_INPUT_DATA_FORMAT(n)	(n) << 4
-	
-	#define RGB2CCIR_RGB_SWAP_ENABLE		1 << 3
-	#define RGB2CCIR_RGB_SWAP_DISABLE		0 << 3
-	
-	#define RGB2CCIR_INPUT_INTERLACE		1 << 2
-	#define RGB2CCIR_INPUT_PROGRESSIVE		0 << 2
-	
-	#define RGB2CCIR_CVBS_PAL				0 << 1
-	#define RGB2CCIR_CVBS_NTSC				1 << 1
-	
-	#define RGB2CCIR_DISABLE				0
-	#define RGB2CCIR_ENABLE					1
-	
+
 /*  CCIR REG    */
 #define CCIR_RESET      0X2a
 
 /*  CLOCK REG    */
 #define CLOCK_CON0      0X2b
 #define CLOCK_CON1      0X2c
-	#define CLOCK_CON1_I2S_CLK_CODEC_PLL	1 << 5
-	#define CLOCK_CON1_I2S_DVIDER_MASK		0x1F
+
 /*  CODEC REG    */
 #define CODEC_CON       0x2e
-	#define CODEC_CON_BIT_HDMI_BLCK_INTERANL		1<<4
-	#define CODEC_CON_BIT_DAC_LRCL_OUTPUT_DISABLE	1<<3
-	#define CODEC_CON_BIT_ADC_LRCK_OUTPUT_DISABLE	1<<2
-	#define CODEC_CON_BIT_INTERAL_CODEC_DISABLE		1<<0
-
 #define I2C_CON         0x2f
 
+struct rk610_core_info{
+    struct i2c_client *client;
+    void *lcd_pdata;
+};
 
 extern int rk610_control_send_byte(const char reg, const char data);
-extern void rk610_control_init_codec(void);
+
 #endif /*end of __RK610_CONTROL_H_*/

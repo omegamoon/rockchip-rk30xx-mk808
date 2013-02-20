@@ -2015,7 +2015,7 @@ static int sensor_s_fmt(struct v4l2_subdev *sd, struct v4l2_mbus_framefmt *mf)
 				qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_DO_WHITE_BALANCE);
 				sensor_set_whiteBalance(icd, qctrl,sensor->info_priv.whiteBalance);
 			}
-            msleep(600);
+            msleep(1100);
 			sensor->info_priv.snap2preview = true;
 		} else if (sensor_fmt_videochk(sd,mf) == true) {			/* ddl@rock-chips.com : Video */
 			qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_EFFECT);

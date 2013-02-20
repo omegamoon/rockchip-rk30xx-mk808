@@ -52,7 +52,7 @@ static DECLARE_COMPLETION(suspend_sys_sync_comp);
 #endif
 struct workqueue_struct *suspend_work_queue;
 struct wake_lock main_wake_lock;
-suspend_state_t requested_suspend_state = PM_SUSPEND_ON;
+suspend_state_t requested_suspend_state = PM_SUSPEND_MEM;
 static struct wake_lock unknown_wakeup;
 static struct wake_lock suspend_backoff_lock;
 

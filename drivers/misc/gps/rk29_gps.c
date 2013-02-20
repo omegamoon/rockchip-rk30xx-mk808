@@ -14,7 +14,7 @@
 #include <asm/uaccess.h>
 #include <linux/wait.h>
 #include "rk29_gps.h"
-#if 0
+#if 1
 #define DBG(x...)	printk(KERN_INFO x)
 #else
 #define DBG(x...)
@@ -28,40 +28,21 @@ static struct rk29_gps_data *pgps;
 static int rk29_gps_uart_to_gpio(int uart_id)
 {
 	if(uart_id == 3) {
-		rk29_mux_api_set(GPIO2B3_UART3SOUT_NAME, GPIO2L_GPIO2B3); 			
-		rk29_mux_api_set(GPIO2B2_UART3SIN_NAME, GPIO2L_GPIO2B2); 		
+		
+	 rk30_mux_api_set(GPIO3D4_UART3SOUT_NAME, GPIO3D_GPIO3D4);
+	 rk30_mux_api_set(GPIO3D3_UART3SIN_NAME, GPIO3D_GPIO3D3);
 
-		gpio_request(RK29_PIN2_PB3, NULL);
-		gpio_request(RK29_PIN2_PB2, NULL);
+		gpio_request(RK30_PIN3_PD3, NULL);
+		gpio_request(RK30_PIN3_PD4, NULL);
 
-		gpio_pull_updown(RK29_PIN2_PB3, PullDisable);
-		gpio_pull_updown(RK29_PIN2_PB2, PullDisable);
+		gpio_pull_updown(RK30_PIN3_PD3, PullDisable);
+		gpio_pull_updown(RK30_PIN3_PD4, PullDisable);
 
-		gpio_direction_output(RK29_PIN2_PB3, GPIO_LOW);
-		gpio_direction_output(RK29_PIN2_PB2, GPIO_LOW);
+		gpio_direction_output(RK30_PIN3_PD3, GPIO_LOW);
+		gpio_direction_output(RK30_PIN3_PD4, GPIO_LOW);
 
-		gpio_free(RK29_PIN2_PB3);
-		gpio_free(RK29_PIN2_PB2);
-	}
-	else if(uart_id == 2) {
-		rk29_mux_api_set(GPIO2B1_UART2SOUT_NAME, GPIO2L_GPIO2B1); 			
-		rk29_mux_api_set(GPIO2B0_UART2SIN_NAME, GPIO2L_GPIO2B0); 		
-
-		gpio_request(RK29_PIN2_PB1, NULL);
-		gpio_request(RK29_PIN2_PB0, NULL);
-
-		gpio_direction_output(RK29_PIN2_PB1, GPIO_LOW);
-		gpio_direction_output(RK29_PIN2_PB0, GPIO_LOW);
-	}
-	else if(uart_id == 1) {
-		rk29_mux_api_set(GPIO2A5_UART1SOUT_NAME, GPIO2L_GPIO2A5); 			
-		rk29_mux_api_set(GPIO2A4_UART1SIN_NAME, GPIO2L_GPIO2A4); 		
-
-		gpio_request(RK29_PIN2_PA5, NULL);
-		gpio_request(RK29_PIN2_PA4, NULL);
-
-		gpio_direction_output(RK29_PIN2_PA5, GPIO_LOW);
-		gpio_direction_output(RK29_PIN2_PA4, GPIO_LOW);
+		gpio_free(RK30_PIN3_PD3);
+		gpio_free(RK30_PIN3_PD4);
 	}
 	else {
 		//to do
@@ -73,39 +54,19 @@ static int rk29_gps_uart_to_gpio(int uart_id)
 static int rk29_gps_gpio_to_uart(int uart_id)
 {
 	if(uart_id == 3) {
-		rk29_mux_api_set(GPIO2B3_UART3SOUT_NAME, GPIO2L_UART3_SOUT);
-		rk29_mux_api_set(GPIO2B2_UART3SIN_NAME, GPIO2L_UART3_SIN); 
 
-		gpio_request(RK29_PIN2_PB3, NULL);
-		gpio_request(RK29_PIN2_PB2, NULL);
+	 rk30_mux_api_set(GPIO3D4_UART3SOUT_NAME, GPIO3D_UART3_SOUT);
+	 rk30_mux_api_set(GPIO3D3_UART3SIN_NAME, GPIO3D_UART3_SIN);
 
-		gpio_direction_output(RK29_PIN2_PB3, GPIO_HIGH);
-		gpio_direction_output(RK29_PIN2_PB2, GPIO_HIGH);
-	}
-	else if(uart_id == 2) {
-		rk29_mux_api_set(GPIO2B1_UART2SOUT_NAME, GPIO2L_UART2_SOUT); 			
-		rk29_mux_api_set(GPIO2B0_UART2SIN_NAME, GPIO2L_UART2_SIN); 		
+		gpio_request(RK30_PIN3_PD3, NULL);
+		gpio_request(RK30_PIN3_PD4, NULL);
 
-		gpio_request(RK29_PIN2_PB1, NULL);
-		gpio_request(RK29_PIN2_PB0, NULL);
-
-		gpio_direction_output(RK29_PIN2_PB1, GPIO_HIGH);
-		gpio_direction_output(RK29_PIN2_PB0, GPIO_HIGH);
-	}
-	else if(uart_id == 1) {
-		rk29_mux_api_set(GPIO2A5_UART1SOUT_NAME, GPIO2L_UART1_SOUT); 			
-		rk29_mux_api_set(GPIO2A4_UART1SIN_NAME, GPIO2L_UART1_SIN); 		
-
-		gpio_request(RK29_PIN2_PA5, NULL);
-		gpio_request(RK29_PIN2_PA4, NULL);
-
-		gpio_direction_output(RK29_PIN2_PA5, GPIO_HIGH);
-		gpio_direction_output(RK29_PIN2_PA4, GPIO_HIGH);
+		gpio_direction_output(RK30_PIN3_PD3, GPIO_HIGH);
+		gpio_direction_output(RK30_PIN3_PD4, GPIO_HIGH);
 	}
 	else {
 		//to do
 	}
-
 	return 0;
 
 }
@@ -113,7 +74,6 @@ static int rk29_gps_gpio_to_uart(int uart_id)
 static int rk29_gps_suspend(struct platform_device *pdev,  pm_message_t state)
 {
 	struct rk29_gps_data *pdata = pdev->dev.platform_data;
-
 	if(!pdata) {
 		printk("%s: pdata = NULL ...... \n", __func__);
 		return -1;

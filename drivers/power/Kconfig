@@ -242,6 +242,13 @@ config NO_BATTERY_IC
 	help
 	  Say no BQ27510(I2C) chip in board .
 
+config BATTERY_OZ8806
+	tristate "OZ8806 battery driver"
+	depends on I2C_RK29 || I2C_RK30 
+	default n
+	help
+	  Say Y here to enable support for batteries with OZ8806(I2C) chip.  
+
 config BATTERY_JZ4740
 	tristate "Ingenic JZ4740 battery"
 	depends on MACH_JZ4740
@@ -301,7 +308,7 @@ config CHARGER_GPIO
 
 config BATTERY_RK29_ADC
 	tristate "RK29 ADC Battery"
-	depends on ADC_RK29
+	depends on ADC_RK29 || ADC_RK30
 	help
 	  Say Y to enable support for the battery on the RK2918.
 

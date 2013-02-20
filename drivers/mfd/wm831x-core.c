@@ -30,6 +30,7 @@
 
 #include <mach/board.h>
 
+
 /* Current settings - values are 2*2^(reg_val/4) microamps.  These are
  * exported since they are used by multiple drivers.
  */
@@ -278,6 +279,22 @@ int wm831x_reg_write(struct wm831x *wm831x, unsigned short reg,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(wm831x_reg_write);
+int wm831x_reg_muti_write(struct wm831x *wm831x, unsigned short reg,
+		     unsigned short *val, int len)
+{
+	int ret;
+
+	mutex_lock(&wm831x->io_lock);
+
+	ret = wm831x_write(wm831x, reg, len*2, val);
+
+	mutex_unlock(&wm831x->io_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(wm831x_reg_muti_write);
+
+
 
 /**
  * wm831x_set_bits: Set the value of a bitfield in a WM831x register

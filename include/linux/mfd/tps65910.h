@@ -369,7 +369,7 @@
 #define DCDCCTRL_DCDCCKSYNC_SHIFT			0
 
 
-/*Register DEVCTRL  (0x80) register.RegisterDescription */
+/*Register DEVCTRL  (0x3F) register.RegisterDescription */
 #define DEVCTRL_RTC_PWDN_MASK				0x40
 #define DEVCTRL_RTC_PWDN_SHIFT				6
 #define DEVCTRL_CK32K_CTRL_MASK				0x20
@@ -386,7 +386,7 @@
 #define DEVCTRL_DEV_OFF_SHIFT				0
 
 
-/*Register DEVCTRL2  (0x80) register.RegisterDescription */
+/*Register DEVCTRL2  (0x40) register.RegisterDescription */
 #define DEVCTRL2_TSLOT_LENGTH_MASK			0x30
 #define DEVCTRL2_TSLOT_LENGTH_SHIFT			4
 #define DEVCTRL2_SLEEPSIG_POL_MASK			0x08
