@@ -101,19 +101,18 @@ config DVFS
 	depends on REGULATOR&&CPU_FREQ
 	default y
 
-config RK_CLOCK_PROC
-	bool "/proc/clocks support"
-	depends on PROC_FS
-
 if !ARCH_RK29
 menu "Support for RK power manage"
 
 config CLK_SWITCH_TO_32K
 	bool "Support clock switch to 32.768k"
 
+config RK30_I2C_INSRAM
+	bool "Support i2c control interface in sram"
+	
+
 endmenu
 endif
-
 config WIFI_CONTROL_FUNC
         bool "Enable WiFi control function abstraction"
         help
@@ -149,11 +148,5 @@ config RK_DEBUG_UART
 config RK_SRAM_DMA
 	bool "Sound DMA buffer in internal SRAM"
 	depends on ARCH_RK30
-
-config RK_PL330_DMA
-	bool
-	select PL330
-	help
-	  DMA API Driver for PL330 DMAC
 
 endif

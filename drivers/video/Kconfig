@@ -2118,8 +2118,12 @@ config CLOSE_WIN1_DYNAMIC
 	---help---
 		this function  can close win1 when video and it have no data in fb0
 
-config FB_WIMO
-	bool "WiMo support"
+config FB_DSP_LUT
+	bool "lut support"
+	depends on FB_RK29 
+
+config FB_MIRRORING
+	bool     "mirroring support"
 	depends on FB_RK29
 
 config FB_NUC900
@@ -2438,7 +2442,7 @@ source "drivers/video/omap2/Kconfig"
 
 source "drivers/video/backlight/Kconfig"
 source "drivers/video/display/Kconfig"
-source "drivers/video/hdmi/Kconfig"
+#source "drivers/video/hdmi/Kconfig"
 source "drivers/video/rockchip/Kconfig"
 
 if VT

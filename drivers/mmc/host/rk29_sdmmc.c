@@ -43,6 +43,7 @@
 #include <mach/io.h>
 #include <mach/gpio.h>
 #include <mach/iomux.h>
+#include <asm/unaligned.h>
 
 #include <asm/dma.h>
 #include <mach/dma-pl330.h>
@@ -66,7 +67,21 @@ int debug_level = 5;
 #if defined(CONFIG_ARCH_RK29)
 #define SDMMC_USE_INT_UNBUSY     0
 #else
-#define SDMMC_USE_INT_UNBUSY     1
+#define SDMMC_USE_INT_UNBUSY     0///1 
+#endif
+
+#if defined(CONFIG_ARCH_RK29)
+    #define RK29_SDMMC0DETECTN_GPIO RK29_PIN2_PA2
+    #define RK29_SDMMC0PWREN_GPIO   RK29_PIN5_PD5
+#elif defined(CONFIG_ARCH_RK30)
+    #define RK29_SDMMC0DETECTN_GPIO RK30_PIN3_PB6
+    #define RK29_SDMMC0PWREN_GPIO   RK30_PIN3_PA7
+#elif defined(CONFIG_ARCH_RK2928)
+    #define RK29_SDMMC0DETECTN_GPIO RK2928_PIN1_PC7
+    #define RK29_SDMMC0PWREN_GPIO   RK2928_PIN1_PB6
+#elif defined(CONFIG_ARCH_RK31)
+    #define RK29_SDMMC0DETECTN_GPIO RK30_PIN3_PB0
+    #define RK29_SDMMC0PWREN_GPIO   RK30_PIN3_PA1
 #endif
 
 #define RK29_SDMMC_ERROR_FLAGS		(SDMMC_INT_FRUN | SDMMC_INT_HLE )
@@ -84,7 +99,7 @@ int debug_level = 5;
 #define RK29_SDMMC_WAIT_DTO_INTERNVAL   4500  //The time interval from the CMD_DONE_INT to DTO_INT
 #define RK29_SDMMC_REMOVAL_DELAY        2000  //The time interval from the CD_INT to detect_timer react.
 
-#define RK29_SDMMC_VERSION "Ver.3.07 The last modify date is 2012-04-23"
+#define RK29_SDMMC_VERSION "Ver.4.06 The last modify date is 2012-09-26"
 
 #if !defined(CONFIG_USE_SDMMC0_FOR_WIFI_DEVELOP_BOARD)	
 #define RK29_CTRL_SDMMC_ID   0  //mainly used by SDMMC
@@ -102,7 +117,11 @@ int debug_level = 5;
 //#define RK29_SDMMC_LIST_QUEUE            /* use list-queue for multi-card*/
 
 #define RK29_SDMMC_DEFAULT_SDIO_FREQ   0 // 1--run in default frequency(50Mhz); 0---run in 25Mhz, 
-#define RK29_MAX_SDIO_FREQ   25000000    //set max-sdio-frequency 25Mhz at the present time¡£
+#if defined(CONFIG_MT6620)
+#define RK29_MAX_SDIO_FREQ   45000000    //set max-sdio-frequency 45Mhz in MTK module.
+#else
+#define RK29_MAX_SDIO_FREQ   25000000    //set max-sdio-frequency 25Mhz at the present time
+#endif
 
 enum {
 	EVENT_CMD_COMPLETE = 0,
@@ -168,6 +187,9 @@ struct rk29_sdmmc {
 	struct mmc_request	*new_mrq;
 	struct mmc_command	*cmd;
 	struct mmc_data		*data;
+	
+	struct scatterlist	*sg;
+
 
 	dma_addr_t		dma_addr;;
 	unsigned int	use_dma:1;
@@ -223,6 +245,11 @@ struct rk29_sdmmc {
 #ifdef CONFIG_PM
     int gpio_irq;
 	int gpio_det;
+#endif
+
+#ifdef CONFIG_RK29_SDIO_IRQ_FROM_GPIO
+    unsigned int sdio_INT_gpio;
+    unsigned int sdio_irq;
 #endif
 
 #if defined(CONFIG_SDMMC0_RK29_WRITE_PROTECT) || defined(CONFIG_SDMMC1_RK29_WRITE_PROTECT)
@@ -796,11 +823,10 @@ static int rk29_sdmmc_start_command(struct rk29_sdmmc *host, struct mmc_command 
  	host->old_cmd = cmd->opcode;
  	host->errorstep = 0;
  	host->pending_events = 0;
-	host->completed_events = 0;	
- 	host->complete_done = 0;
+	host->completed_events = 0;	 	
     host->retryfunc = 0;
     host->cmd_status = 0;
-
+	
     if(MMC_STOP_TRANSMISSION != cmd->opcode)
     {
         host->data_status = 0;
@@ -813,19 +839,24 @@ static int rk29_sdmmc_start_command(struct rk29_sdmmc *host, struct mmc_command 
     }
 			
 	rk29_sdmmc_write(host->regs, SDMMC_CMDARG, cmd->arg); // write to SDMMC_CMDARG register
+#if defined(CONFIG_ARCH_RK29)	
 	rk29_sdmmc_write(host->regs, SDMMC_CMD, cmd_flags | SDMMC_CMD_START); // write to SDMMC_CMD register
-
+#else
+    rk29_sdmmc_write(host->regs, SDMMC_CMD, cmd_flags | SDMMC_CMD_USE_HOLD_REG |SDMMC_CMD_START); // write to SDMMC_CMD register
+#endif
 
     xbwprintk(1,"\n%s..%d..************.start cmd=%d, arg=0x%x ********  [%s]\n", \
 			__FUNCTION__, __LINE__, cmd->opcode, cmd->arg, host->dma_name);
 
-	host->mmc->doneflag = 1;	
 
 	/* wait until CIU accepts the command */
 	while (--tmo && (rk29_sdmmc_read(host->regs, SDMMC_CMD) & SDMMC_CMD_START))
 	{
 		udelay(2);//cpu_relax();
 	}
+
+	host->complete_done = 0;
+	host->mmc->doneflag = 1;	
 	
 	if(!tmo)
 	{
@@ -963,7 +994,10 @@ static void rk29_sdmmc_control_host_dma(struct rk29_sdmmc *host, bool enable)
 
 static void send_stop_cmd(struct rk29_sdmmc *host)
 {
-    int ret;
+    int ret, i;
+   // int timeout = 250;
+   // unsigned int value;
+
 
     if(host->mrq->cmd->error)
     {
@@ -983,8 +1017,22 @@ static void send_stop_cmd(struct rk29_sdmmc *host)
 							__FUNCTION__, __LINE__, host->dma_name);
         }
     }
-    
-    mod_timer(&host->request_timer, jiffies + msecs_to_jiffies(RK29_SDMMC_SEND_START_TIMEOUT+1500));
+
+    i = 0;
+    while(++i>2)
+    {
+        ret = rk29_sdmmc_wait_unbusy(host);
+        if(SDM_SUCCESS == ret)
+            break;
+       
+        mod_timer(&host->request_timer, jiffies + msecs_to_jiffies(RK29_SDMMC_SEND_START_TIMEOUT+2500));
+        xbwprintk(7, "%d..%s:   retry times=%d    before send_stop_cmd [%s].\n", __LINE__, __FUNCTION__, i, host->dma_name);
+
+    }
+
+
+    host->errorstep = 0xe1;     
+    mod_timer(&host->request_timer, jiffies + msecs_to_jiffies(RK29_SDMMC_SEND_START_TIMEOUT+2500));
 		
     host->stopcmd.opcode = MMC_STOP_TRANSMISSION;
     host->stopcmd.flags  = MMC_RSP_SPI_R1B | MMC_RSP_R1B | MMC_CMD_AC;;
@@ -1008,6 +1056,7 @@ static void send_stop_cmd(struct rk29_sdmmc *host)
         host->state = STATE_IDLE;
         host->complete_done = 4;
     }
+    host->errorstep = 0xe2;
 }
 
 
@@ -1022,9 +1071,158 @@ static void rk29_sdmmc_dma_complete(void *arg, int size, enum rk29_dma_buffresul
 	host->intInfo.transLen = host->intInfo.desLen;	
 }
 
+static int rk29_sdmmc_read_data_pio(struct rk29_sdmmc *host)
+{
+	struct scatterlist	*sg;
+	u32			*buf;
+	unsigned int		offset = 0;
+	struct mmc_data		*data;
+	u32			value;
+	unsigned int		nbytes = 0;
+    int remaining;
+
+    value = rk29_sdmmc_read(host->regs, SDMMC_STATUS);
+	if ( value& SDMMC_STAUTS_FIFO_EMPTY)
+	    goto done;
+
+    if(NULL == host->data)
+       goto done; 
+
+    if((NULL == host)&&(NULL == host->data))
+        goto done;
+
+    data = host->data;
+	sg = host->sg;
+	buf = (u32 *)sg_virt(sg);
+	
+    while ( (host->intInfo.transLen < host->intInfo.desLen)  && (!(value & SDMMC_STAUTS_FIFO_EMPTY)) )
+    {
+        if( ((offset + (host->intInfo.desLen - host->intInfo.transLen))<<2) <= sg->length )
+        {
+            buf[offset] = rk29_sdmmc_read(host->regs, SDMMC_DATA);
+            offset ++;
+	        nbytes += 4;
+	        host->intInfo.transLen++;
+
+	        if ((offset<<2) == sg->length) 
+	        {
+				flush_dcache_page(sg_page(sg));
+				host->sg = sg = sg_next(sg);
+				if (!sg)
+					goto done;
+
+				offset = 0;
+				buf = (u32 *)sg_virt(sg);
+			}
+	        
+        }
+        else
+        {
+            remaining = (sg->length>>2) - offset;
+            while( remaining>0)
+            {
+                buf[offset] = rk29_sdmmc_read(host->regs, SDMMC_DATA);
+                offset ++;
+	            nbytes += 4;
+	            remaining --;
+	            host->intInfo.transLen++;
+            }
+
+            flush_dcache_page(sg_page(sg));
+
+	        host->sg = sg = sg_next(sg);
+	        if (!sg)
+		        goto done;
+
+            offset = 0;
+	        buf = (u32 *)sg_virt(sg);                   
+        }
+
+        data->bytes_xfered += nbytes;
+
+        value = rk29_sdmmc_read(host->regs, SDMMC_STATUS);
+    }
+
+done:
+    return 0;
+}
+
+
+static int rk29_sdmmc_write_data_pio(struct rk29_sdmmc *host)
+{
+	struct scatterlist	*sg;
+	u32			*buf;
+	unsigned int		offset = 0;
+	struct mmc_data		*data;
+	u32			value;
+	unsigned int		nbytes = 0;
+    int remaining;
+
+    value = rk29_sdmmc_read(host->regs, SDMMC_STATUS);
+	if ( value& SDMMC_STAUTS_FIFO_EMPTY)
+	    goto done;
+
+    if(NULL == host->data)
+       goto done; 
+
+    if((NULL == host)&&(NULL == host->data))
+        goto done;
+
+    data = host->data;
+	sg = host->sg;
+	buf = (u32 *)sg_virt(sg);
+	
+    while ( (host->intInfo.transLen < host->intInfo.desLen)  && (!(value & SDMMC_STAUTS_FIFO_EMPTY)) )
+    {
+        if( ((offset + (host->intInfo.desLen - host->intInfo.transLen))<<2) <= sg->length )
+        {
+            rk29_sdmmc_write(host->regs, SDMMC_DATA, buf[offset]);
+            offset ++;
+	        nbytes += 4;
+	        host->intInfo.transLen++;
+
+	        if ((offset<<2) == sg->length) 
+	        {
+				host->sg = sg = sg_next(sg);
+				if (!sg)
+					goto done;
+
+				offset = 0;
+				buf = (u32 *)sg_virt(sg);
+			}
+	        
+        }
+        else
+        {
+            remaining = (sg->length>>2) - offset;
+            while( remaining>0)
+            {
+                rk29_sdmmc_write(host->regs, SDMMC_DATA, buf[offset]);
+                offset ++;
+	            nbytes += 4;
+	            remaining --;
+	            host->intInfo.transLen++;
+            }
+
+	        host->sg = sg = sg_next(sg);
+	        if (!sg)
+		        goto done;
+
+            offset = 0;
+	        buf = (u32 *)sg_virt(sg);                   
+        }
+
+        data->bytes_xfered += nbytes;
+
+        value = rk29_sdmmc_read(host->regs, SDMMC_STATUS);
+    }
+    
+done:
+    return 0;
+}
+
 static int rk29_sdmmc_submit_data_dma(struct rk29_sdmmc *host, struct mmc_data *data)
 {
-	struct scatterlist		*sg;
 	unsigned int			i,direction, sgDirection;
 	int ret, dma_len=0;
 	
@@ -1043,16 +1241,13 @@ static int rk29_sdmmc_submit_data_dma(struct rk29_sdmmc *host, struct mmc_data *
 	}
 
 	if (data->blksz & 3)
-		return -EINVAL;
-	for_each_sg(data->sg, sg, data->sg_len, i) 
 	{
-		if (sg->offset & 3 || sg->length & 3)
-		{
-		    printk(KERN_WARNING "%s..%d...call for_each_sg() fail !![%s]\n", __FUNCTION__, __LINE__, host->dma_name);
-		    host->errorstep = 0x7;
-			return -EINVAL;
-		}
-	}
+	    printk(KERN_ERR "%s..%d...data_len not aligned to 4bytes.  [%s]\n", \
+	        __FUNCTION__, __LINE__, host->dma_name);
+	        
+		return -EINVAL;
+    }
+
 	if (data->flags & MMC_DATA_READ)
 	{
 		direction = RK29_DMASRC_HW;  
@@ -1128,13 +1323,25 @@ static int rk29_sdmmc_prepare_write_data(struct rk29_sdmmc *host, struct mmc_dat
  
     //SDMMC controller request the data is multiple of 4.
     count = (dataLen >> 2) + ((dataLen & 0x3) ? 1:0);
-
-    if (count <= FIFO_DEPTH)
+#if 0
+    if(count <= FIFO_DEPTH)    
+#else
+    #if defined(CONFIG_ARCH_RK29)
+    if( (count <= 0x20) && (RK29_CTRL_SDMMC_ID != host->pdev->id))
+    #else
+    if( (count <= 0x80) && (RK29_CTRL_SDMMC_ID != host->pdev->id))
+    #endif
+#endif
     {
+           
+        #if 1
         for (i=0; i<count; i++)
         {
             rk29_sdmmc_write(host->regs, SDMMC_DATA, pBuf[i]);
         }
+        #else
+        rk29_sdmmc_write_data_pio(host);
+        #endif
     }
     else
     {
@@ -1194,7 +1401,7 @@ static int rk29_sdmmc_prepare_read_data(struct rk29_sdmmc *host, struct mmc_data
     host->intInfo.transLen = 0;
     host->intInfo.pBuf = (u32 *)host->pbuf;
        
-    if (count > (RX_WMARK+1))  //datasheet error.actually, it can nont waken the interrupt when less and equal than RX_WMARK+1
+    if(count > (RX_WMARK+1))  //datasheet error.actually, it can nont waken the interrupt when less and equal than RX_WMARK+1
     {
         if(0) //(host->intInfo.desLen <= 512 )
         {
@@ -1229,112 +1436,53 @@ static int rk29_sdmmc_prepare_read_data(struct rk29_sdmmc *host, struct mmc_data
 
 static int rk29_sdmmc_read_remain_data(struct rk29_sdmmc *host, u32 originalLen, void *pDataBuf)
 {
-    u32  value = 0;
-
-    u32     i = 0;
-    u32     *pBuf = (u32 *)pDataBuf;
-    u8      *pByteBuf = (u8 *)pDataBuf;
-    u32     lastData = 0;
-
-    //SDMMC controller must be multiple of 32. so if transfer 13, then actuall we should write or read 16 byte.
-    u32  count = (originalLen >> 2) + ((originalLen & 0x3) ? 1:0);
+	struct mmc_data		*data;	
+    struct scatterlist  *sg;
+    u32   *buf,  i = 0;
 
     if(1 == host->dodma)
     {
-        //when use DMA, there are remain data only when datalen/4 less than  RX_WMARK+1 same as equaltion. or not multiple of 4
-        if (!((value = rk29_sdmmc_read(host->regs, SDMMC_STATUS)) & SDMMC_STAUTS_FIFO_EMPTY))
+        data = host->data;
+        sg = host->sg;
+        buf = (u32 *)sg_virt(sg);
+
+        for_each_sg(data->sg, sg, data->sg_len, i) 
         {
-            if (count <= (RX_WMARK+1))
-            {
-                i = 0;
-                while ((i<(originalLen >> 2))&&(!(value & SDMMC_STAUTS_FIFO_EMPTY)))
-                {
-                    pBuf[i++] = rk29_sdmmc_read(host->regs, SDMMC_DATA);
-                    value = rk29_sdmmc_read(host->regs, SDMMC_STATUS);
-                }
-            }
-
-            if (count > (originalLen >> 2))
-            {
-                lastData = rk29_sdmmc_read(host->regs, SDMMC_DATA);
-
-                //fill the 1 to 3 byte.
-                for (i=0; i<(originalLen & 0x3); i++)
-                {
-                    pByteBuf[(originalLen & 0xFFFFFFFC) + i] = (u8)((lastData >> (i << 3)) & 0xFF); //default little-endian
-                }
-            }
+            if (!sg)
+                return -1;
+            if (sg_is_last(sg))
+                break;
         }
-    }
-    else
-    {
-        if (!((value = rk29_sdmmc_read(host->regs, SDMMC_STATUS)) & SDMMC_STAUTS_FIFO_EMPTY))
-        {
-             while ( (host->intInfo.transLen < host->intInfo.desLen)  && (!(value & SDMMC_STAUTS_FIFO_EMPTY)) )
-            {
-                pBuf[host->intInfo.transLen++] = rk29_sdmmc_read(host->regs, SDMMC_DATA);  
-                value = rk29_sdmmc_read(host->regs, SDMMC_STATUS);  
-            }
 
-            if (count > (originalLen >> 2))
-            {
-                lastData = rk29_sdmmc_read(host->regs, SDMMC_DATA); 
-
-                //fill the 1 to 3 byte.
-                for (i=0; i<(originalLen & 0x3); i++)
-                {
-                    pByteBuf[(originalLen & 0xFFFFFFFC) + i] = (u8)((lastData >> (i << 3)) & 0xFF);  //default little-endian
-                }
-            }
-        }
+        flush_dcache_page(sg_page(sg));
+        host->sg = sg;
     }
+
+    rk29_sdmmc_read_data_pio(host);
     
     return SDM_SUCCESS;
 }
 
-
-static void rk29_sdmmc_do_pio_read(struct rk29_sdmmc *host)
-{
-    int i;
-    for (i=0; i<(RX_WMARK+1); i++)
-    {
-        host->intInfo.pBuf[host->intInfo.transLen + i] = rk29_sdmmc_read(host->regs, SDMMC_DATA);
-    }
-    host->intInfo.transLen += (RX_WMARK+1);
-}
-
-static void rk29_sdmmc_do_pio_write(struct rk29_sdmmc *host)
-{
-    int i;
-    if ( (host->intInfo.desLen - host->intInfo.transLen) > (FIFO_DEPTH - TX_WMARK) )
-    {
-        for (i=0; i<(FIFO_DEPTH - TX_WMARK); i++)
-        {
-            rk29_sdmmc_write(host->regs, SDMMC_DATA, host->intInfo.pBuf[host->intInfo.transLen + i]);
-        }
-        host->intInfo.transLen += (FIFO_DEPTH - TX_WMARK);
-    }
-    else
-    {
-        for (i=0; i<(host->intInfo.desLen - host->intInfo.transLen); i++)
-        {
-            rk29_sdmmc_write(host->regs, SDMMC_DATA, host->intInfo.pBuf[host->intInfo.transLen + i]);
-        }
-        host->intInfo.transLen =  host->intInfo.desLen;
-    }
-      
-}
-
-
 static void rk29_sdmmc_submit_data(struct rk29_sdmmc *host, struct mmc_data *data)
 {
-    int ret;
+    int ret,i;
+    struct scatterlist *sg;
     
     if(data)
     {
         host->data = data;
         data->error = 0;
         host->cmd->data = data;
+        host->sg = data->sg;
+        
+        for_each_sg(data->sg, sg, data->sg_len, i) 
+        {
+    		if (sg->offset & 3 || sg->length & 3) 
+    		{
+    			data->error = -EILSEQ;
+    			return ;
+    		}
+	    }
 
         data->bytes_xfered = 0;
         host->pbuf = (u32*)sg_virt(data->sg);
@@ -1385,14 +1533,18 @@ static void rk29_sdmmc_submit_data(struct rk29_sdmmc *host, struct mmc_data *dat
 static int sdmmc_send_cmd_start(struct rk29_sdmmc *host, unsigned int cmd)
 {
 	int tmo = RK29_SDMMC_SEND_START_TIMEOUT*10;//wait 60ms cycle.
-	
-	rk29_sdmmc_write(host->regs, SDMMC_CMD, SDMMC_CMD_START | cmd);		
+
+#if defined(CONFIG_ARCH_RK29)		
+	rk29_sdmmc_write(host->regs, SDMMC_CMD, SDMMC_CMD_START | cmd);	
+#else	
+    rk29_sdmmc_write(host->regs, SDMMC_CMD, SDMMC_CMD_USE_HOLD_REG |SDMMC_CMD_START | cmd);
+#endif    
 	while (--tmo && (rk29_sdmmc_read(host->regs, SDMMC_CMD) & SDMMC_CMD_START))
 	{
 	    udelay(2);
 	}
 	
-	if(!tmo) 
+	if(!tmo && test_bit(RK29_SDMMC_CARD_PRESENT, &host->flags)) 
 	{
 		printk(KERN_WARNING "%s.. %d   set cmd(value=0x%x) register timeout error !   [%s]\n",\
 				__FUNCTION__,__LINE__, cmd, host->dma_name);
@@ -1440,6 +1592,10 @@ static int rk29_sdmmc_get_cd(struct mmc_host *mmc)
             break;
     
 	}
+#if defined(CONFIG_USE_SDMMC0_FOR_WIFI_DEVELOP_BOARD)
+    set_bit(RK29_SDMMC_CARD_PRESENT, &host->flags);
+    return 1;
+#endif
 
 	 return cdetect;
 }
@@ -1470,7 +1626,7 @@ int rk29_sdmmc_reset_controller(struct rk29_sdmmc *host)
     /* reset */
 #if defined(CONFIG_ARCH_RK29)     
     rk29_sdmmc_write(host->regs, SDMMC_CTRL,(SDMMC_CTRL_RESET | SDMMC_CTRL_FIFO_RESET ));
-#elif defined(CONFIG_ARCH_RK30)
+#else
     rk29_sdmmc_write(host->regs, SDMMC_CTRL,(SDMMC_CTRL_RESET | SDMMC_CTRL_FIFO_RESET | SDMMC_CTRL_DMA_RESET));
 #endif
     timeOut = 1000;
@@ -1523,7 +1679,11 @@ int rk29_sdmmc_reset_controller(struct rk29_sdmmc *host)
 		    if(0== host->pdev->id)
 		    {
     		    #if !defined(CONFIG_USE_SDMMC0_FOR_WIFI_DEVELOP_BOARD)
+    		        #if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+                    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA);
+                    #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA | SDMMC_INT_SDIO);
+    		        #endif    		        
     		    #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA);
     		    #endif
@@ -1531,14 +1691,22 @@ int rk29_sdmmc_reset_controller(struct rk29_sdmmc *host)
 		    else if(1== host->pdev->id)
 		    {
 		       #if !defined(CONFIG_USE_SDMMC1_FOR_WIFI_DEVELOP_BOARD)
+                    #if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+                    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA);
+                    #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA | SDMMC_INT_SDIO);
+    		        #endif
     		   #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA);
     		   #endif 
 		    }
 		    else
 		    {
+		        #if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+                rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA);
+                #else
 		        rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA | SDMMC_INT_SDIO);
+		        #endif
 		    }
 		}
 	}
@@ -1553,7 +1721,11 @@ int rk29_sdmmc_reset_controller(struct rk29_sdmmc *host)
 		    if(0== host->pdev->id)
 		    {
     		    #if !defined(CONFIG_USE_SDMMC0_FOR_WIFI_DEVELOP_BOARD)
+                    #if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+                        rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO);
+                    #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO | SDMMC_INT_SDIO);
+                    #endif
     		    #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO);
     		    #endif
@@ -1561,14 +1733,22 @@ int rk29_sdmmc_reset_controller(struct rk29_sdmmc *host)
 		    else if(1== host->pdev->id)
 		    {
 		        #if !defined(CONFIG_USE_SDMMC1_FOR_WIFI_DEVELOP_BOARD)
+    		        #if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+                        rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO);
+                    #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO | SDMMC_INT_SDIO);
+                    #endif
     		    #else
     		    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO);
     		    #endif
 		    }
 		    else
 		    {
-		        rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEDMA | SDMMC_INT_SDIO);
+                #if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+                    rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO);
+                #else
+		            rk29_sdmmc_write(host->regs, SDMMC_INTMASK,RK29_SDMMC_INTMASK_USEIO | SDMMC_INT_SDIO);
+                #endif
 		    }
 		}		
     }
@@ -1821,6 +2001,9 @@ static void rk29_sdmmc_dealwith_timeout(struct rk29_sdmmc *host)
     	    host->cmd->data->error = -EILSEQ;
     	    rk29_sdmmc_write(host->regs, SDMMC_RINTSTS,SDMMC_INT_DTO);  // clear interrupt
     	    rk29_sdmmc_set_pending(host, EVENT_DATA_COMPLETE);
+#if SDMMC_USE_INT_UNBUSY    	    
+    	    rk29_sdmmc_set_pending(host, EVENT_DATA_UNBUSY);
+#endif    	    
     	    tasklet_schedule(&host->tasklet);
     	    break;
 #if SDMMC_USE_INT_UNBUSY
@@ -1851,20 +2034,20 @@ static void rk29_sdmmc_INT_CMD_DONE_timeout(unsigned long host_data)
 {
 	struct rk29_sdmmc *host = (struct rk29_sdmmc *) host_data;
 
-	//spin_lock(&host->lock);
+	rk29_sdmmc_enable_irq(host, false);
 	
 	if(STATE_SENDING_CMD == host->state)
 	{
-	    if(0==host->cmd->retries)
+	    if((0==host->cmd->retries)&&(12 != host->cmd->opcode)/*&&(55 != host->cmd->opcode)*/)
 	    {
-    	    printk(KERN_WARNING "%s..%d... cmd=%d, INT_CMD_DONE timeout, errorStep=0x%x, host->state=%x [%s]\n",\
-                __FUNCTION__, __LINE__,host->cmd->opcode, host->errorstep,host->state,host->dma_name);
+    	    printk(KERN_WARNING "%d... cmd=%d(arg=0x%x), INT_CMD_DONE timeout, errorStep=0x%x, host->state=%x [%s]\n",\
+                 __LINE__,host->cmd->opcode, host->cmd->arg,host->errorstep,host->state,host->dma_name);
         }
-            
+        rk29_sdmmc_write(host->regs, SDMMC_RINTSTS, 0xFFFFFFFE); // clear INT,except for SDMMC_INT_CD
         rk29_sdmmc_dealwith_timeout(host);        
 	}
-	//spin_unlock(&host->lock);
 	
+    rk29_sdmmc_enable_irq(host, true);
 }
 
 
@@ -1872,7 +2055,7 @@ static void rk29_sdmmc_INT_DTO_timeout(unsigned long host_data)
 {
 	struct rk29_sdmmc *host = (struct rk29_sdmmc *) host_data;
 
-	//spin_lock(&host->lock);
+	rk29_sdmmc_enable_irq(host, false);
 
 #if SDMMC_USE_INT_UNBUSY
     if( (host->cmdr & SDMMC_CMD_DAT_EXP) &&((STATE_DATA_BUSY == host->state)||(STATE_DATA_UNBUSY == host->state) ))
@@ -1885,11 +2068,10 @@ static void rk29_sdmmc_INT_DTO_timeout(unsigned long host_data)
     	   printk(KERN_WARNING "%s..%d...cmd=%d DTO_timeout,cmdr=0x%x, errorStep=0x%x, Hoststate=%x [%s]\n", \
     	        __FUNCTION__, __LINE__,host->cmd->opcode,host->cmdr ,host->errorstep,host->state,host->dma_name);
 	    }
-
+        rk29_sdmmc_write(host->regs, SDMMC_RINTSTS, 0xFFFFFFFE); // clear INT,except for SDMMC_INT_CD
 	    rk29_sdmmc_dealwith_timeout(host);  
 	}
-	//spin_unlock(&host->lock);
- 
+	rk29_sdmmc_enable_irq(host, true);
  
 }
 
@@ -1930,8 +2112,8 @@ static int rk29_sdmmc_start_request(struct mmc_host *mmc )
 
     //check data-busy if the current command has the bit13 in command register.
     if( cmdr & SDMMC_CMD_PRV_DAT_WAIT )
-    {
-        if(rk29_sdmmc_read(host->regs, SDMMC_STATUS) & SDMMC_STAUTS_DATA_BUSY)
+    {        
+        if(SDM_SUCCESS != rk29_sdmmc_wait_unbusy(host))   //if(rk29_sdmmc_read(host->regs, SDMMC_STATUS) & SDMMC_STAUTS_DATA_BUSY)
         {
         	host->mrq = host->new_mrq;///
             cmd->error = -ETIMEDOUT;
@@ -2017,9 +2199,10 @@ start_request_Err:
 
     host->state = STATE_IDLE;  //modifyed by xbw  at 2011-08-15
     
-    if(host->mrq && host->mmc->doneflag)
+    if(host->mrq && host->mmc->doneflag && host->complete_done)
     {
         host->mmc->doneflag = 0;
+        host->complete_done = 0;
         spin_unlock_irqrestore(&host->lock, iflags);
         
         mmc_request_done(host->mmc, host->mrq);
@@ -2037,6 +2220,7 @@ start_request_Err:
 static void rk29_sdmmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
     unsigned long iflags;
+    int i,ret;
 	struct rk29_sdmmc *host = mmc_priv(mmc); 
 	
     spin_lock_irqsave(&host->lock, iflags);
@@ -2056,6 +2240,14 @@ static void rk29_sdmmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		return;
 	}
 	#endif
+
+    i=0;
+	while(++i>2)
+    {
+        ret = rk29_sdmmc_wait_unbusy(host);
+        if(SDM_SUCCESS == ret)
+            break;
+    }
 
     xbwprintk(6, "\n%s..%d..New cmd=%2d(arg=0x%8x)=== cardPresent=0x%lu, state=0x%x [%s]\n", \
         __FUNCTION__, __LINE__,mrq->cmd->opcode, mrq->cmd->arg,host->flags,host->state, host->dma_name);
@@ -2090,7 +2282,7 @@ static void rk29_sdmmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
         	    }
         	    else
         	    {
-        	        if(host->error_times++ % (RK29_ERROR_PRINTK_INTERVAL*3) ==0)
+        	        if(host->error_times++ % (RK29_ERROR_PRINTK_INTERVAL*10) ==0)
         	        {
                 		printk(KERN_INFO "%s: Refuse to run CMD%2d(arg=0x%8x) due to the removal of card.  3==[%s]==\n", \
                     		    __FUNCTION__, mrq->cmd->opcode, mrq->cmd->arg, host->dma_name);
@@ -2180,7 +2372,6 @@ static void rk29_sdmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	struct rk29_sdmmc *host = mmc_priv(mmc);
 
     rk29_sdmmc_enable_irq(host, false);
-    //spin_lock(&host->lock);
 
     if(test_bit(RK29_SDMMC_CARD_PRESENT, &host->flags) || (RK29_CTRL_SDMMC_ID == host->pdev->id))
     {
@@ -2212,13 +2403,17 @@ static void rk29_sdmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
         {
             case MMC_POWER_UP:
             	rk29_sdmmc_write(host->regs, SDMMC_PWREN, POWER_ENABLE);
-            	
+            	            	
             	//reset the controller if it is SDMMC0
             	if(RK29_CTRL_SDMMC_ID == host->pdev->id)
             	{
             	    xbwprintk(7, "%s..%d..POWER_UP, call reset_controller, initialized_flags=%d [%s]\n",\
             	        __FUNCTION__, __LINE__, host->mmc->re_initialized_flags,host->dma_name);
             	        
+                    //power-on; (#define RK29_SDMMC0PWREN_GPIO  RK30_PIN3_PA7 in RK3066 platform)
+                    gpio_direction_output(RK29_SDMMC0PWREN_GPIO,GPIO_LOW);
+                    //printk("##########vcc_sd power on##########\n");
+                    
             	    mdelay(5);
             	        
             	    rk29_sdmmc_hw_init(host);
@@ -2231,7 +2426,7 @@ static void rk29_sdmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
                 {
                 	rk29_sdmmc_control_clock(host, FALSE);
                 	rk29_sdmmc_write(host->regs, SDMMC_PWREN, POWER_DISABLE);
-                
+                	                
                 	if(5 == host->bus_mode)
                 	{
                         mdelay(5);
@@ -2240,6 +2435,10 @@ static void rk29_sdmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
                             
                         rk29_sdmmc_reset_controller(host);
                 	}
+
+                    //power-off 
+                    gpio_direction_output(RK29_SDMMC0PWREN_GPIO,GPIO_HIGH); 
+                    //printk("##########vcc_sd power off##########\n");
               
             	}
 
@@ -2287,7 +2486,6 @@ static void rk29_sdmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		rk29_sdmmc_change_clk_div(host, ios->clock);
 	}
 out:	   
-    //spin_unlock(&host->lock);
     rk29_sdmmc_enable_irq(host, true);
     
 }
@@ -2332,22 +2530,49 @@ static int rk29_sdmmc_get_ro(struct mmc_host *mmc)
 
 }
 
+#if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+static irqreturn_t rk29_sdmmc_sdio_irq_cb(int irq, void *dev_id)
+{
+	struct rk29_sdmmc *host = dev_id;
+    //printk("%d..%s:  sdio_gpio_int callback.  ====[%s]==\n", __LINE__, __FUNCTION__, host->dma_name);
+
+    //rk28_send_wakeup_key(); //wake up backlight
+
+    if(host && host->mmc)
+        mmc_signal_sdio_irq(host->mmc);
+
+	return IRQ_HANDLED;
+}
+#endif
+
 
 static void rk29_sdmmc_enable_sdio_irq(struct mmc_host *mmc, int enable)
 {
-	u32 intmask;
+#if !defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)	
+	u32 intmask;	
 	unsigned long flags;
+#endif	
 	struct rk29_sdmmc *host = mmc_priv(mmc);
-	
+		
+#if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)	
+    if(enable) 
+        enable_irq(host->sdio_irq);
+        //enable_irq_wake(host->sdio_irq);
+    else 
+        disable_irq_nosync(host->sdio_irq);
+
+#else
     spin_lock_irqsave(&host->lock, flags);
-    
-	intmask = rk29_sdmmc_read(host->regs, SDMMC_INTMASK);
-	
+
+	intmask = rk29_sdmmc_read(host->regs, SDMMC_INTMASK);	
 	if(enable)
 		rk29_sdmmc_write(host->regs, SDMMC_INTMASK, intmask | SDMMC_INT_SDIO);
 	else
 		rk29_sdmmc_write(host->regs, SDMMC_INTMASK, intmask & ~SDMMC_INT_SDIO);
-    spin_unlock_irqrestore(&host->lock, flags);
+
+	spin_unlock_irqrestore(&host->lock, flags);	
+#endif		
+    
     
 }
 
@@ -2655,7 +2880,9 @@ static int rk29_sdmmc_command_complete(struct rk29_sdmmc *host,
 	        cmd->resp[0] = rk29_sdmmc_read(host->regs, SDMMC_RESP0);
 	    }
 	}
-	
+
+     #if 0 
+       //debug	
 	if(cmd->error)
 	{
 	    del_timer_sync(&host->DTO_timer);
@@ -2672,6 +2899,8 @@ static int rk29_sdmmc_command_complete(struct rk29_sdmmc *host,
 	    }
 
 	}
+    #endif
+
     del_timer_sync(&host->request_timer);
 
 
@@ -2710,7 +2939,6 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
 	struct mmc_data		*data = host->cmd->data;
 	enum rk29_sdmmc_state	state = host->state;
 	int pending_flag, stopflag;
-	unsigned long iflags;
 
 	rk29_sdmmc_enable_irq(host, false);
 	spin_lock(&host->lock);//spin_lock_irqsave(&host->lock, iflags); 
@@ -2734,7 +2962,11 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
             {
                 xbwprintk(7, "%s..%d..   prev_state=  STATE_SENDING_CMD, pendingEvernt=0x%lu  [%s]\n",\
                     __FUNCTION__, __LINE__,host->completed_events, host->dma_name);
-
+                if(host->cmd->error)
+                {
+                    del_timer_sync(&host->request_timer);
+                }
+                
                 if (!rk29_sdmmc_test_and_clear_pending(host, EVENT_CMD_COMPLETE))
                 	break;
                  host->errorstep = 0xfb;
@@ -2760,17 +2992,13 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
                 {
                     del_timer_sync(&host->DTO_timer); //delete the timer for INT_DTO
                     
-                    if(data->stop)
+                    if((data->stop) && (MMC_STOP_TRANSMISSION != host->cmd->opcode)) 
                     {
                         xbwprintk(7, "%s..%d..  cmderr, so call send_stop_cmd() [%s]\n", \
 								__FUNCTION__, __LINE__, host->dma_name);
 
-                        #if 0
-                        state = STATE_SENDING_CMD;//STATE_SENDING_STOP; 
-                        send_stop_cmd(host);
-                        #else
                         stopflag = 1;  //Moidfyed by xbw at 2011-09-08
-                        #endif
+
                         break;
                     }
 
@@ -2793,13 +3021,13 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
                 rk29_sdmmc_set_completed(host, EVENT_DATA_COMPLETE);
 
              #if SDMMC_USE_INT_UNBUSY
-                if((24==host->cmd->opcode)||(25==host->cmd->opcode))
+                if((MMC_WRITE_BLOCK==host->cmd->opcode)||(MMC_WRITE_MULTIPLE_BLOCK==host->cmd->opcode))
                 {
                     /*
                     ** use DTO_timer for waiting for INT_UNBUSY.
                     ** max 250ms in specification, but adapt 500 for the compatibility of all kinds of sick sdcard. 
                     */                    
-                    mod_timer(&host->DTO_timer, jiffies + msecs_to_jiffies(500));
+                    mod_timer(&host->DTO_timer, jiffies + msecs_to_jiffies(5000));
                 }
                 else
                 {
@@ -2816,7 +3044,7 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
              case STATE_DATA_UNBUSY:
              {
              #if SDMMC_USE_INT_UNBUSY
-                if((24==host->cmd->opcode)||(25==host->cmd->opcode))
+                if((MMC_WRITE_BLOCK==host->cmd->opcode)||(MMC_WRITE_MULTIPLE_BLOCK==host->cmd->opcode))
                 {
                     if (!rk29_sdmmc_test_and_clear_pending(host, EVENT_DATA_UNBUSY))
                     	break;
@@ -2844,12 +3072,7 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
                 xbwprintk(7, "%s..%d..  after DATA_COMPLETE, so call send_stop_cmd() [%s]\n", \
 						__FUNCTION__, __LINE__, host->dma_name);
 
-                #if 0
-                state = STATE_SENDING_CMD;
-                send_stop_cmd(host);
-                #else
                 stopflag = 2; //Moidfyed by xbw at 2011-09-08
-                #endif
                 
                 break;
             }
@@ -2877,7 +3100,8 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
         }
 
         pending_flag = (host->complete_done > 0) && (host->retryfunc<50) \
-                       && (rk29_sdmmc_test_pending(host, EVENT_CMD_COMPLETE)|| rk29_sdmmc_test_pending(host, EVENT_DATA_COMPLETE) );
+                       && (rk29_sdmmc_test_pending(host, EVENT_CMD_COMPLETE)|| rk29_sdmmc_test_pending(host, EVENT_DATA_COMPLETE) ) \
+                       && test_bit(RK29_SDMMC_CARD_PRESENT, &host->flags);
 
         if(pending_flag)
         {
@@ -2896,21 +3120,40 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
                         
 	} while(pending_flag && ++host->retryfunc); //while(0);
 
-	 if(0!=stopflag)
+	if(0!=stopflag)
     {
         if(host->cmd->error)
         xbwprintk(3,"%d:  call send_stop_cmd== %d,  completedone=%d, doneflag=%d, hoststate=%x, statusReg=0x%x \n", \
             __LINE__,stopflag, host->complete_done, host->mmc->doneflag, state, rk29_sdmmc_read(host->regs, SDMMC_STATUS));
             
-        state = STATE_SENDING_CMD;
-        send_stop_cmd(host);   //Moidfyed by xbw at 2011-09-08
+        host->errorstep = 0xe0;  
+        
+        if(test_bit(RK29_SDMMC_CARD_PRESENT, &host->flags))
+        {
+            state = STATE_SENDING_CMD;
+            send_stop_cmd(host);   //Moidfyed by xbw at 2011-09-08
+        }
+        else
+        {
+            host->complete_done = 5;
+        }
     }
 
 	host->state = state;
 		 
-    if(0==host->complete_done)
+    if((0==host->complete_done)&& host->mmc->doneflag && test_bit(RK29_SDMMC_CARD_PRESENT, &host->flags))
     {
         host->errorstep = 0xf2;
+
+     #if 0
+        //debug
+        if(12==host->cmd->opcode)
+        {
+             printk(KERN_ERR "%d... cmd=%d(arg=0x%x),blksz=%d,blocks=%d,errorStep=0x%x,\n host->state=%x, statusReg=0x%x  [%s]\n",\
+                 __LINE__,host->mrq->cmd->opcode, host->mrq->cmd->arg, host->mrq->cmd->data->blksz, host->mrq->cmd->data->blocks,\
+                 host->errorstep,host->state,rk29_sdmmc_read(host->regs, SDMMC_STATUS),host->dma_name);
+        }
+      #endif  
         
         spin_unlock(&host->lock);//spin_unlock_irqrestore(&host->lock, iflags);
         rk29_sdmmc_enable_irq(host, true);
@@ -2919,9 +3162,10 @@ static void rk29_sdmmc_tasklet_func(unsigned long priv)
     host->errorstep = 0xf3; 
 	host->state = STATE_IDLE;
 	 
-	 if(host->mrq && host->mmc->doneflag)
+	 if(host->mrq && host->mmc->doneflag && host->complete_done)
 	 {
 	    host->mmc->doneflag = 0;
+	    host->complete_done = 0;
 	    spin_unlock(&host->lock);//spin_unlock_irqrestore(&host->lock, iflags);
 	    rk29_sdmmc_enable_irq(host, true);
 	    mmc_request_done(host->mmc, host->mrq);
@@ -2942,7 +3186,7 @@ static inline void rk29_sdmmc_cmd_interrupt(struct rk29_sdmmc *host, u32 status)
     host->errorstep = 0xfc;
     if((MMC_STOP_TRANSMISSION != host->cmd->opcode) && (host->cmdr & SDMMC_CMD_DAT_EXP))
     {
-        unit = 3*1024*1024;
+        unit = 2*1024*1024;
         multi = rk29_sdmmc_read(host->regs, SDMMC_BYTCNT)/unit;
         multi += ((rk29_sdmmc_read(host->regs, SDMMC_BYTCNT)%unit) ? 1 :0 );
         multi = (multi>0) ? multi : 1;
@@ -3021,9 +3265,6 @@ static irqreturn_t rk29_sdmmc_interrupt(int irq, void *dev_id)
 
     }
     
-    xbwprintk(1,"\n*******test***********\n%s:INT_CD=0x%x,INT-En=%d,hostState=%d, cmd=%d,present Old=%d ==> New=%d [%s]\n",\
-            __FUNCTION__, pending, host->mmc->re_initialized_flags, host->state, host->cmd->opcode,present_old, present,  host->dma_name);
-
     if (pending & SDMMC_INT_CMD_DONE) {
 
         xbwprintk(6, "%s..%d..  CMD%d INT_CMD_DONE  INT=0x%x   [%s]\n", \
@@ -3035,6 +3276,7 @@ static irqreturn_t rk29_sdmmc_interrupt(int irq, void *dev_id)
         goto Exit_INT;
     }
 
+#if !defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
     if(pending & SDMMC_INT_SDIO) 
     {	
         xbwprintk(7, "%s..%d..  INT_SDIO  INT=0x%x   [%s]\n", \
@@ -3045,7 +3287,7 @@ static irqreturn_t rk29_sdmmc_interrupt(int irq, void *dev_id)
 
         goto Exit_INT;
     }
-
+#endif
 
     if(pending & SDMMC_INT_RTO) 
     {
@@ -3100,7 +3342,8 @@ static irqreturn_t rk29_sdmmc_interrupt(int irq, void *dev_id)
     	printk(KERN_WARNING "%s: INT=0x%x Oh!My God,let me see!What happened?Why?Where? CMD%d(arg=0x%x, retries=%d). [%s]\n", \
 				__FUNCTION__, pending, host->cmd->opcode, host->cmd->arg, host->cmd->retries,host->dma_name);
     	
-        rk29_sdmmc_write(host->regs, SDMMC_RINTSTS,SDMMC_INT_FRUN); 
+        //rk29_sdmmc_write(host->regs, SDMMC_RINTSTS,SDMMC_INT_FRUN);
+        rk29_sdmmc_write(host->regs, SDMMC_RINTSTS,0xFFFFFFFE); 
         goto Exit_INT;
     }
 
@@ -3110,7 +3353,7 @@ static irqreturn_t rk29_sdmmc_interrupt(int irq, void *dev_id)
 				__FUNCTION__, __LINE__, pending, host->dma_name);
 
         rk29_sdmmc_write(host->regs, SDMMC_RINTSTS,SDMMC_INT_RXDR);  //  clear interrupt
-        rk29_sdmmc_do_pio_read(host);
+        rk29_sdmmc_read_data_pio(host);
     }
 
     if (pending & SDMMC_INT_TXDR) 
@@ -3119,7 +3362,7 @@ static irqreturn_t rk29_sdmmc_interrupt(int irq, void *dev_id)
 				__FUNCTION__, __LINE__, pending, host->dma_name);
 				
         rk29_sdmmc_write(host->regs, SDMMC_RINTSTS,SDMMC_INT_TXDR);  //  clear interrupt
-        rk29_sdmmc_do_pio_write(host); 
+        rk29_sdmmc_write_data_pio(host); 
     }
 
 #if SDMMC_USE_INT_UNBUSY
@@ -3220,33 +3463,34 @@ static int rk29_sdmmc_probe(struct platform_device *pdev)
 	//int				irq;
 	int				ret = 0;
 
+#if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)	
+	unsigned long trigger_flags;
+#endif
+
     /* must have platform data */
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
 		dev_err(&pdev->dev, "Platform data missing\n");
 		ret = -ENODEV;
-		host->errorstep = 0x87;
 		goto out;
 	}
 
 	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!regs)
 	{
-	    host->errorstep = 0x88;
 		return -ENXIO;
 	}
 
 	mmc = mmc_alloc_host(sizeof(struct rk29_sdmmc), &pdev->dev);
 	if (!mmc)
 	{
-	    host->errorstep = 0x89;
 		ret = -ENOMEM;
 		goto rel_regions;
 	}	
-
+    
 	host = mmc_priv(mmc);
-	host->mmc = mmc;
-	host->pdev = pdev;	
+    host->mmc = mmc;
+    host->pdev = pdev;
 
 	host->ctype = 0; // set default 1 bit mode
 	host->errorstep = 0;
@@ -3260,11 +3504,19 @@ static int rk29_sdmmc_probe(struct platform_device *pdev)
 	host->retryfunc = 0;
 	host->mrq = NULL;
 	host->new_mrq = NULL;
+	host->irq_state = true;
 	
 #ifdef CONFIG_PM
     host->gpio_det = pdata->detect_irq;
 #endif
     host->set_iomux = pdata->set_iomux;
+
+#if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+    if(RK29_CTRL_SDIO1_ID == host->pdev->id)
+    {
+        host->sdio_INT_gpio = pdata->sdio_INT_gpio;
+    }
+#endif
 
 	if(pdata->io_init)
 		pdata->io_init();
@@ -3400,7 +3652,13 @@ static int rk29_sdmmc_probe(struct platform_device *pdev)
         }
         else
         {
-            ret = rk29_dma_config(host->dma_info.chn, 4, 1);
+            #if defined(CONFIG_ARCH_RK29)
+                // to maintain set this value to 1 in RK29,noted at 2012-07-16
+                ret = rk29_dma_config(host->dma_info.chn, 4, 1);  
+            #else
+                // a unified set the burst value to 16 in RK30,noted at 2012-07-16
+                ret = rk29_dma_config(host->dma_info.chn, 4, 16); 
+            #endif 
         }
 #endif
         if(ret < 0)
@@ -3427,7 +3685,12 @@ static int rk29_sdmmc_probe(struct platform_device *pdev)
 	host->write_protect = pdata->write_prt;	
 #endif	
 
-    rk29_sdmmc_hw_init(host);
+#if defined(CONFIG_ARCH_RK29)
+   if(RK29_CTRL_SDMMC_ID == host->pdev->id)   
+    {
+       rk29_sdmmc_hw_init(host);
+    }
+#endif
 
     ret = request_irq(host->irq, rk29_sdmmc_interrupt, 0, dev_name(&pdev->dev), host);
 	if (ret)
@@ -3438,8 +3701,35 @@ static int rk29_sdmmc_probe(struct platform_device *pdev)
 	    host->errorstep = 0x8C;
 	    goto err_dmaunmap;
 	}
-	
-    host->irq_state = true;
+
+#if defined(CONFIG_RK29_SDIO_IRQ_FROM_GPIO)
+    if(RK29_CTRL_SDIO1_ID == host->pdev->id)
+    {
+        gpio_request(host->sdio_INT_gpio, "sdio_interrupt");
+
+         // intput + pull_Up,
+        gpio_direction_input(host->sdio_INT_gpio);
+        //gpio_direction_output(host->sdio_INT_gpio, GPIO_HIGH);
+        gpio_pull_updown(host->sdio_INT_gpio, 0); //disable default internal pull-down
+
+        host->sdio_irq = gpio_to_irq(host->sdio_INT_gpio);
+        trigger_flags = IRQF_TRIGGER_LOW;
+        //printk("%d..%s  sdio interrupt gpio level=%lu   ====[%s]====\n", __LINE__, __FUNCTION__, trigger_flags, host->dma_name);
+        ret = request_irq(host->sdio_irq, rk29_sdmmc_sdio_irq_cb,
+                    trigger_flags,
+                    "sdio_interrupt",
+                    host);                    
+        if (ret)
+        {	
+
+            printk("%s..%d..  sdio_request_INT_irq error=%d ====xbw[%s]====\n", \
+        			__FUNCTION__, __LINE__, ret, host->dma_name);
+            host->errorstep = 0x8D;
+            goto err_dmaunmap;
+        } 
+        disable_irq_nosync(host->sdio_irq);   
+    }
+#endif
     
     /* setup sdmmc1 wifi card detect change */
     if (pdata->register_status_notify) {
@@ -3569,80 +3859,59 @@ static int __exit rk29_sdmmc_remove(struct platform_device *pdev)
 
 #ifdef CONFIG_PM
 
+static irqreturn_t det_keys_isr(int irq, void *dev_id)
+{
+	struct rk29_sdmmc *host = dev_id;
+	dev_info(&host->pdev->dev, "sd det_gpio changed(%s), send wakeup key!\n",
+		gpio_get_value(RK29_SDMMC0DETECTN_GPIO)?"removed":"insert");
+	rk29_sdmmc_detect_change((unsigned long)dev_id);
+
+	return IRQ_HANDLED;
+}
+
+static int rk29_sdmmc_sdcard_suspend(struct rk29_sdmmc *host)
+{
+	int ret = 0;
+	
 #if defined(CONFIG_ARCH_RK29)
-static irqreturn_t det_keys_isr(int irq, void *dev_id)
-{
-	struct rk29_sdmmc *host = dev_id;
-	dev_info(&host->pdev->dev, "sd det_gpio changed(%s), send wakeup key!\n",
-		gpio_get_value(RK29_PIN2_PA2)?"removed":"insert");
-	rk29_sdmmc_detect_change((unsigned long)dev_id);
-
-	return IRQ_HANDLED;
-}
-
-static int rk29_sdmmc_sdcard_suspend(struct rk29_sdmmc *host)
-{
-	int ret = 0;
-	rk29_mux_api_set(GPIO2A2_SDMMC0DETECTN_NAME, GPIO2L_GPIO2A2);
-	gpio_request(RK29_PIN2_PA2, "sd_detect");
-	gpio_direction_input(RK29_PIN2_PA2);
-
-	host->gpio_irq = gpio_to_irq(RK29_PIN2_PA2);
-	ret = request_irq(host->gpio_irq, det_keys_isr,
-					    (gpio_get_value(RK29_PIN2_PA2))?IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING,
-					    "sd_detect",
-					    host);
-	
-	enable_irq_wake(host->gpio_irq);
-
-	return ret;
-}
-static void rk29_sdmmc_sdcard_resume(struct rk29_sdmmc *host)
-{
-	disable_irq_wake(host->gpio_irq);
-	free_irq(host->gpio_irq,host);
-	gpio_free(RK29_PIN2_PA2);
-	rk29_mux_api_set(GPIO2A2_SDMMC0DETECTN_NAME, GPIO2L_SDMMC0_DETECT_N);
-}
-
+    rk29_mux_api_set(GPIO2A2_SDMMC0DETECTN_NAME, GPIO2L_GPIO2A2);
 #elif defined(CONFIG_ARCH_RK30)
-static irqreturn_t det_keys_isr(int irq, void *dev_id)
-{
-	struct rk29_sdmmc *host = dev_id;
-	dev_info(&host->pdev->dev, "sd det_gpio changed(%s), send wakeup key!\n",
-		gpio_get_value(RK30_PIN3_PB6)?"removed":"insert");
-	rk29_sdmmc_detect_change((unsigned long)dev_id);
-
-	return IRQ_HANDLED;
-}
-
-static int rk29_sdmmc_sdcard_suspend(struct rk29_sdmmc *host)
-{
-	int ret = 0;
 	rk29_mux_api_set(GPIO3B6_SDMMC0DETECTN_NAME, GPIO3B_GPIO3B6);
-	gpio_request(RK30_PIN3_PB6, "sd_detect");
-	gpio_direction_input(RK30_PIN3_PB6);
-
-	host->gpio_irq = gpio_to_irq(RK30_PIN3_PB6);
-	ret = request_irq(host->gpio_irq, det_keys_isr,
-					    (gpio_get_value(RK30_PIN3_PB6))?IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING,
-					    "sd_detect",
-					    host);
-	
-	enable_irq_wake(host->gpio_irq);
-
-	return ret;
-}
-static void rk29_sdmmc_sdcard_resume(struct rk29_sdmmc *host)
-{
-	disable_irq_wake(host->gpio_irq);
-	free_irq(host->gpio_irq,host);
-	gpio_free(RK30_PIN3_PB6);
-	rk29_mux_api_set(GPIO3B6_SDMMC0DETECTN_NAME, GPIO3B_SDMMC0_DETECT_N);
-}
-
+#elif defined(CONFIG_ARCH_RK2928)
+	rk29_mux_api_set(GPIO1C1_MMC0_DETN_NAME, GPIO1C_GPIO1C1);
+#elif defined(CONFIG_ARCH_RK31)
+	rk29_mux_api_set(GPIO3B0_SDMMC0DETECTN_NAME, GPIO3B_GPIO3B0);   
 #endif
 
+	gpio_request(RK29_SDMMC0DETECTN_GPIO, "sd_detect");
+	gpio_direction_input(RK29_SDMMC0DETECTN_GPIO);
+
+	host->gpio_irq = gpio_to_irq(RK29_SDMMC0DETECTN_GPIO);
+	ret = request_irq(host->gpio_irq, det_keys_isr,
+					    (gpio_get_value(RK29_SDMMC0DETECTN_GPIO))?IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING,
+					    "sd_detect",
+					    host);
+	
+	enable_irq_wake(host->gpio_irq);
+
+	return ret;
+}
+static void rk29_sdmmc_sdcard_resume(struct rk29_sdmmc *host)
+{
+	disable_irq_wake(host->gpio_irq);
+	free_irq(host->gpio_irq,host);
+	gpio_free(RK29_SDMMC0DETECTN_GPIO);
+	
+#if defined(CONFIG_ARCH_RK29)
+    rk29_mux_api_set(GPIO2A2_SDMMC0DETECTN_NAME, GPIO2L_SDMMC0_DETECT_N);
+#elif defined(CONFIG_ARCH_RK30)
+	rk29_mux_api_set(GPIO3B6_SDMMC0DETECTN_NAME, GPIO3B_SDMMC0_DETECT_N);
+#elif defined(CONFIG_ARCH_RK2928)
+	rk29_mux_api_set(GPIO1C1_MMC0_DETN_NAME, GPIO1C_MMC0_DETN);
+#elif defined(CONFIG_ARCH_RK31)
+	rk29_mux_api_set(GPIO3B0_SDMMC0DETECTN_NAME, GPIO3B_SDMMC0DETECTN);	
+#endif	
+}
 
 static int rk29_sdmmc_suspend(struct platform_device *pdev, pm_message_t state)
 {

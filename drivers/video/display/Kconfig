@@ -22,8 +22,20 @@ config DISPLAY_SUPPORT
 comment "Display hardware drivers"
 	depends on DISPLAY_SUPPORT
 source "drivers/video/display/screen/Kconfig"
+
+#$_rbox_$_modify_$ zhy modified for box display system
 source "drivers/video/display/lcd/Kconfig"
+source "drivers/video/display/hdmi/Kconfig"
+source "drivers/video/display/vga/Kconfig"
 source "drivers/video/display/tve/Kconfig"
 
-endmenu
+config DISPLAY_AUTO_SWITCH
+	bool "Enable auto switch display interface"
 
+config DISPLAY_KEY_LED_CONTROL
+	bool "Enalbe Keyboard and Led Control"
+	help
+		Enable use led to indicate display interface.
+		Enable use keyboard or remote controler to switch display interface or mode.
+#$_rbox_$_modify_$_end
+endmenu

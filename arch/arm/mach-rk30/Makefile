@@ -11,6 +11,7 @@ obj-y += pmu.o
 obj-y += reset.o
 obj-y += timer.o
 obj-y += tsadc.o
+obj-$(CONFIG_FIQ) += fiq.o
 obj-$(CONFIG_SMP) += platsmp.o headsmp.o
 obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 obj-$(CONFIG_LOCAL_TIMERS) += localtimer.o
@@ -19,11 +20,18 @@ obj-$(CONFIG_CPU_IDLE) += cpuidle.o
 obj-$(CONFIG_CPU_FREQ) += cpufreq.o
 obj-$(CONFIG_DVFS) += dvfs.o
 obj-$(CONFIG_DDR_FREQ) += ddr_freq.o
-obj-$(CONFIG_RK30_PWM_LOGIC_VOL) += pwm_sram.o
+obj-$(CONFIG_RK30_I2C_INSRAM) += i2c_sram.o
 
-obj-$(CONFIG_MACH_RK3066_SDK) += board-rk30-sdk.o board-rk30-sdk-key.o rk29_charge_lowpower.o
-obj-$(CONFIG_MACH_RK30_SDK) += board-rk30-sdk.o board-rk30-sdk-key.o rk29_charge_lowpower.o
+obj-$(CONFIG_MACH_RK3066_SDK) += board-rk30-sdk.o board-rk30-sdk-key.o
+obj-$(CONFIG_MACH_RK30_SDK) += board-rk30-sdk.o board-rk30-sdk-key.o
 obj-$(CONFIG_MACH_RK30_PHONE) += board-rk30-phone.o board-rk30-phone-key.o
+
+##$_rbox_$_modify_begin
+obj-$(CONFIG_MACH_RK30_BOX) += board-rk30-box.o board-rk30-box-key.o board-rk30-box-rfkill.o
+obj-$(CONFIG_MACH_RK30_BOX_PIZZA) += board-rk30-box.o board-rk30-box-key.o board-rk30-box-rfkill.o
+obj-$(CONFIG_MACH_RK30_BOX_HOTDOG) += board-rk30-box.o board-rk30-box-key.o board-rk30-box-rfkill.o
+##$_rbox_$_modify_end
+
 obj-$(CONFIG_MACH_RK30_PHONE_LOQUAT) += board-rk30-phone-loquat.o board-rk30-phone-loquat-key.o
 obj-$(CONFIG_MACH_RK30_PHONE_A22) += board-rk30-phone-a22.o board-rk30-phone-a22-key.o 
 

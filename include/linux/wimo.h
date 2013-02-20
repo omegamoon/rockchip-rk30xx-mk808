@@ -16,24 +16,31 @@
 
 #ifndef __ARCH_ARM_MACH_RK29_WIMO_H
 #define __ARCH_ARM_MACH_RK29_WIMO_H
-#ifdef CONFIG_FB_WIMO
-#define FB_WIMO_FLAG  
-#endif
+#if	1//def CONFIG_FB_WIMO
 
 
 
 
 
-#if	1//def	CONFIG_FB_WIMO
 #define WIMO_IOCTL_MAGIC 0x60
-#define WIMO_START				_IOW(WIMO_IOCTL_MAGIC, 0x1, unsigned int)
-#define WIMO_STOP				_IOW(WIMO_IOCTL_MAGIC, 0x2, unsigned int)
-#define WIMO_SET_ROTATION			_IOW(WIMO_IOCTL_MAGIC, 0x3, unsigned int)
-#define WIMO_DEVICE_OKAY			_IOW(WIMO_IOCTL_MAGIC, 0x4, unsigned int)
+#define WIMO_START						_IOW(WIMO_IOCTL_MAGIC, 0x1, unsigned int)
+#define WIMO_STOP						_IOW(WIMO_IOCTL_MAGIC, 0x2, unsigned int)
+#define WIMO_SET_ROTATION				_IOW(WIMO_IOCTL_MAGIC, 0x3, unsigned int)
+#define WIMO_DEVICE_OKAY				_IOW(WIMO_IOCTL_MAGIC, 0x4, unsigned int)
+#define WIMO_SET_TIME					_IOW(WIMO_IOCTL_MAGIC, 0x5, unsigned int)
+#define WIMO_GET_TIME					_IOW(WIMO_IOCTL_MAGIC, 0x6, unsigned int)
+#define WIMO_GET_ROTATION				_IOW(WIMO_IOCTL_MAGIC, 0x7, unsigned int)
+#define WIMO_SET_ADDR 					_IOW(WIMO_IOCTL_MAGIC, 0x8, unsigned int)
+#define WIMO_GET_ADDR 					_IOW(WIMO_IOCTL_MAGIC, 0x9, unsigned int)
+#define WIMO_SET_SIGNAL					_IOW(WIMO_IOCTL_MAGIC, 0xa, unsigned int)
+#define WIMO_GET_SIGNAL					_IOW(WIMO_IOCTL_MAGIC, 0xb, unsigned int)
+#define WIMO_SET_WIRELESSDB				_IOW(WIMO_IOCTL_MAGIC, 0xc, unsigned int)
+#define WIMO_GET_WIRELESSDB				_IOW(WIMO_IOCTL_MAGIC, 0xd, unsigned int)
+#define WIMO_GET_WIRELESS_DATALOST		_IOW(WIMO_IOCTL_MAGIC, 0xe, unsigned int)
 
-#define WIMO_VIDEO_OPEN				_IOW(WIMO_IOCTL_MAGIC, 0x11, unsigned int)
-#define WIMO_VIDEO_CLOSE			_IOW(WIMO_IOCTL_MAGIC, 0x12, unsigned int)
-#define WIMO_VIDEO_GET_BUF			_IOW(WIMO_IOCTL_MAGIC, 0x13, unsigned int)
+#define WIMO_VIDEO_OPEN					_IOW(WIMO_IOCTL_MAGIC, 0x11, unsigned int)
+#define WIMO_VIDEO_CLOSE				_IOW(WIMO_IOCTL_MAGIC, 0x12, unsigned int)
+#define WIMO_VIDEO_GET_BUF				_IOW(WIMO_IOCTL_MAGIC, 0x13, unsigned int)
 
 #define WIMO_AUDIO_OPEN           	      	_IOW(WIMO_IOCTL_MAGIC, 0x21, unsigned int)
 #define WIMO_AUDIO_CLOSE                	_IOW(WIMO_IOCTL_MAGIC, 0x22, unsigned int)

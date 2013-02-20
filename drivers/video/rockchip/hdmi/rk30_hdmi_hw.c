@@ -61,6 +61,8 @@ int rk30_hdmi_detect_hotplug(void)
 	int value =	HDMIRdReg(HPD_MENS_STA);
 	
 	hdmi_dbg(hdmi->dev, "[%s] value %02x\n", __FUNCTION__, value);
+	#if 0
+	// When HPD and TMDS_CLK was high, HDMI is actived.
 	value &= m_HOTPLUG_STATUS | m_MSEN_STATUS;
 	if(value  == (m_HOTPLUG_STATUS | m_MSEN_STATUS) )
 		return HDMI_HPD_ACTIVED;
@@ -68,6 +70,15 @@ int rk30_hdmi_detect_hotplug(void)
 		return HDMI_HPD_INSERT;
 	else
 		return HDMI_HPD_REMOVED;
+	#else
+	// When HPD was high, HDMI is actived.
+	if(value & m_HOTPLUG_STATUS)
+		return HDMI_HPD_ACTIVED;
+	else if(value & m_MSEN_STATUS)
+		return HDMI_HPD_INSERT;
+	else
+		return HDMI_HPD_REMOVED;
+	#endif
 }
 
 #define HDMI_EDID_DDC_CLK	90000
@@ -125,7 +136,9 @@ int rk30_hdmi_read_edid(int block, unsigned char *buff)
 		}		
 		if(interrupt & m_INT_EDID_ERR)
 			hdmi_err(hdmi->dev, "[%s] edid read error\n", __FUNCTION__);
-
+		
+		hdmi_dbg(hdmi->dev, "[%s] edid try times %d\n", __FUNCTION__, trytime);
+		msleep(100);
 	}
 	// Disable edid interrupt
 	HDMIWrReg(INTR_MASK1, m_INT_HOTPLUG | m_INT_MSENS);
@@ -341,7 +354,7 @@ static void rk30_hdmi_config_csc(struct rk30_hdmi_video_para *vpara)
 
 int rk30_hdmi_config_video(struct rk30_hdmi_video_para *vpara)
 {
-	int value;
+	int value, vsync_offset;
 	struct fb_videomode *mode;
 	
 	hdmi_dbg(hdmi->dev, "[%s]\n", __FUNCTION__);
@@ -378,10 +391,10 @@ int rk30_hdmi_config_video(struct rk30_hdmi_video_para *vpara)
 	hdmi->tmdsclk = mode->pixclock;
 
 	if( (vpara->vic == HDMI_720x480p_60Hz_4_3) || (vpara->vic == HDMI_720x480p_60Hz_16_9) )
-		value = v_VSYNC_OFFSET(6);
+		vsync_offset = 6;
 	else
-		value = v_VSYNC_OFFSET(0);
-	value |= v_EXT_VIDEO_ENABLE(1) | v_INTERLACE(mode->vmode);
+		vsync_offset = 0;
+	value = v_VSYNC_OFFSET(vsync_offset) | v_EXT_VIDEO_ENABLE(1) | v_INTERLACE(mode->vmode);
 	if(mode->sync & FB_SYNC_HOR_HIGH_ACT)
 		value |= v_HSYNC_POLARITY(1);
 	if(mode->sync & FB_SYNC_VERT_HIGH_ACT)
@@ -410,11 +423,7 @@ int rk30_hdmi_config_video(struct rk30_hdmi_video_para *vpara)
 	value = mode->upper_margin + mode->vsync_len + mode->lower_margin;
 	HDMIWrReg(EXT_VIDEO_PARA_VBLANK_L, value & 0xFF);
 	
-	if(vpara->vic == HDMI_720x480p_60Hz_4_3 || vpara->vic == HDMI_720x480p_60Hz_16_9)
-		value = 42;
-	else
-		value = mode->upper_margin + mode->vsync_len;
-
+	value = mode->upper_margin + mode->vsync_len + vsync_offset;
 	HDMIWrReg(EXT_VIDEO_PARA_VDELAY, value & 0xFF);
 	
 	value = mode->vsync_len;

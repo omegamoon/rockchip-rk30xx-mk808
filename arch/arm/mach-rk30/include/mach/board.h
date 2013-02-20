@@ -11,6 +11,24 @@
 #include <plat/board.h>
 #include <mach/sram.h>
 #include <linux/i2c-gpio.h>
+enum {
+        I2C_IDLE = 0,
+        I2C_SDA_LOW,
+        I2C_SCL_LOW,
+        BOTH_LOW,
+};
+struct rk30_i2c_platform_data {
+	char *name;
+	int bus_num;
+#define I2C_RK29_ADAP   0
+#define I2C_RK30_ADAP   1
+	int adap_type;
+	int is_div_from_arm;
+	u32 flags;
+	int (*io_init)(void);
+	int (*io_deinit)(void);
+        int (*check_idle)(void);
+};
 
 /* adc battery */
 struct rk30_adc_battery_platform_data {
@@ -23,13 +41,11 @@ struct rk30_adc_battery_platform_data {
         int charge_set_pin;
 
 //        int adc_channel;
-        int charge_type_pin;
+
         int dc_det_level;
         int batt_low_level;
         int charge_ok_level;
         int charge_set_level;
-        int usb_det_pin;
-        int usb_det_level;
 };
 
 #ifndef _LINUX_WLAN_PLAT_H_
@@ -81,6 +97,13 @@ void board_gpio_suspend(void);
 void board_gpio_resume(void);
 void __sramfunc board_pmu_suspend(void);
 void __sramfunc board_pmu_resume(void);
+
+#ifdef CONFIG_RK30_PWM_REGULATOR
+void  rk30_pwm_suspend_voltage_set(void);
+void  rk30_pwm_resume_voltage_set(void);
+void __sramfunc rk30_pwm_logic_suspend_voltage(void);
+ void __sramfunc rk30_pwm_logic_resume_voltage(void);
+#endif
 
 extern struct sys_timer rk30_timer;
 

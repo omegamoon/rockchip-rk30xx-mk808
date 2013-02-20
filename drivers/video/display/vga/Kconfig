@@ -1,0 +1,8 @@
+#
+# VGA drivers configuration
+#
+
+config RK_VGA
+	bool "VGA support"
+	help
+		Support VGA output.

@@ -1,3 +1,4 @@
+
 /*
  * rk29_i2s.c  --  ALSA SoC ROCKCHIP IIS Audio Layer Platform driver
  *
@@ -37,6 +38,9 @@
 #include "rk29_pcm.h"
 #include "rk29_i2s.h"
 
+#if defined(CONFIG_SND_RKXX_SOC_SPDIF)
+#include "rkxx_spdif.h"
+#endif
 
 #if 0
 #define I2S_DBG(x...) printk(KERN_INFO x)
@@ -94,6 +98,7 @@ struct snd_soc_dai_driver rk29_i2s_dai[MAX_I2S];
 struct snd_soc_dai rk29_i2s_dai[MAX_I2S];
 #endif
 EXPORT_SYMBOL_GPL(rk29_i2s_dai);
+
 
 /*
 static struct rockchip_pcm_dma_params rockchip_i2s_pcm_stereo_out[MAX_I2S] = {
@@ -443,7 +448,6 @@ static int rockchip_i2s_trigger(struct snd_pcm_substream *substream, int cmd, st
         struct rk29_i2s_info *i2s = to_info(rtd->dai->cpu_dai);
 #endif
         bool stopI2S = false;
-
         I2S_DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
         switch (cmd) {
         case SNDRV_PCM_TRIGGER_START:
@@ -451,8 +455,9 @@ static int rockchip_i2s_trigger(struct snd_pcm_substream *substream, int cmd, st
         case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:   
                 if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 	                rockchip_snd_rxctrl(i2s, 1, stopI2S);
-                else
+                else{
 	                rockchip_snd_txctrl(i2s, 1, stopI2S);
+	                }
                 break;
         
         case SNDRV_PCM_TRIGGER_SUSPEND:
@@ -461,8 +466,9 @@ static int rockchip_i2s_trigger(struct snd_pcm_substream *substream, int cmd, st
         case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
                 if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 	                rockchip_snd_rxctrl(i2s, 0, stopI2S);
-                else
+                else{
 	                rockchip_snd_txctrl(i2s, 0, stopI2S);
+	              }
                 break;
         default:
                 ret = -EINVAL;
@@ -709,7 +715,12 @@ static int __devinit rockchip_i2s_probe(struct platform_device *pdev)
 	dai->playback.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | SNDRV_PCM_FMTBIT_S24_LE;
 	dai->capture.channels_min = 2;
 	dai->capture.channels_max = 2;
-	dai->capture.rates = ROCKCHIP_I2S_RATES;//;SNDRV_PCM_RATE_44100
+	/*
+	 * modified by zxg
+	 * modify the capture support rates to SNDRV_PCM_RATE_44100
+	 * because I2S uses only 44100 samplerate. 
+	 */
+	dai->capture.rates = SNDRV_PCM_RATE_44100;//ROCKCHIP_I2S_RATES;//;SNDRV_PCM_RATE_44100
 	dai->capture.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | SNDRV_PCM_FMTBIT_S24_LE;
 	dai->probe = rockchip_i2s_dai_probe; 
 	dai->ops = &rockchip_i2s_dai_ops;
@@ -739,10 +750,12 @@ static int __devinit rockchip_i2s_probe(struct platform_device *pdev)
 	i2s->dma_playback->client = &rk29_dma_client_out;
 	i2s->dma_playback->dma_size = 4;
 	i2s->dma_playback->flag = 0;			//add by sxj, used for burst change
-#ifdef CONFIG_SND_I2S_DMA_EVENT_STATIC
+	
+#ifdef CONFIG_SND_DMA_EVENT_STATIC
 	 WARN_ON(rk29_dma_request(i2s->dma_playback->channel, i2s->dma_playback->client, NULL));
 	 WARN_ON(rk29_dma_request(i2s->dma_capture->channel, i2s->dma_capture->client, NULL));
 #endif
+
 	i2s->iis_clk = clk_get(&pdev->dev, "i2s");
 	I2S_DBG("Enter:%s, %d, iis_clk=%p\n", __FUNCTION__, __LINE__, i2s->iis_clk);
 	if (IS_ERR(i2s->iis_clk)) {

@@ -1,3 +1,4 @@
+
 /*
  * rk29_i2s.c  --  ALSA SoC ROCKCHIP IIS Audio Layer Platform driver
  *
@@ -83,7 +84,6 @@ static inline struct rk29_i2s_info *to_info(struct snd_soc_dai *cpu_dai)
 static struct rockchip_pcm_dma_params rk29_i2s_pcm_stereo_out[MAX_I2S];
 static struct rockchip_pcm_dma_params rk29_i2s_pcm_stereo_in[MAX_I2S];
 static struct rk29_i2s_info rk29_i2s[MAX_I2S];
-extern struct delayed_work rt5631_delay_cap; //bard 7-16
 
 struct snd_soc_dai_driver rk29_i2s_dai[MAX_I2S];
 EXPORT_SYMBOL_GPL(rk29_i2s_dai);
@@ -197,9 +197,6 @@ static void rockchip_snd_rxctrl(struct rk29_i2s_info *i2s, int on, bool stopI2S)
 		}
 
 	  flag_i2s_rx = 1;
-//bard 7-16 s
-		schedule_delayed_work(&rt5631_delay_cap,HZ/4);
-//bard 7-16 e
 	}
 	else
 	{
@@ -360,6 +357,10 @@ static int rockchip_i2s_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+#if defined(CONFIG_SND_RKXX_SOC_SPDIF)   
+extern void rk29_spdif_ctrl(int on_off, bool stopSPDIF);
+#endif
+
 static int rockchip_i2s_trigger(struct snd_pcm_substream *substream, int cmd, struct snd_soc_dai *dai)
 {    
 	int ret = 0;
@@ -374,8 +375,10 @@ static int rockchip_i2s_trigger(struct snd_pcm_substream *substream, int cmd, st
         case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:   
                 if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 	                rockchip_snd_rxctrl(i2s, 1, stopI2S);
-                else
+                else{
+           
 	                rockchip_snd_txctrl(i2s, 1, stopI2S);
+                }
                 break;
         
         case SNDRV_PCM_TRIGGER_SUSPEND:
@@ -384,8 +387,9 @@ static int rockchip_i2s_trigger(struct snd_pcm_substream *substream, int cmd, st
         case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
                 if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 	                rockchip_snd_rxctrl(i2s, 0, stopI2S);
-                else
+                else{
 	                rockchip_snd_txctrl(i2s, 0, stopI2S);
+                }
                 break;
         default:
                 ret = -EINVAL;
@@ -495,9 +499,9 @@ static int rockchip_i2s_dai_probe(struct snd_soc_dai *dai)
 			rk30_mux_api_set(GPIO0B2_I2S8CHLRCKRX_NAME, GPIO0B_I2S_8CH_LRCK_RX);
 			rk30_mux_api_set(GPIO0B3_I2S8CHLRCKTX_NAME, GPIO0B_I2S_8CH_LRCK_TX);	
 			rk30_mux_api_set(GPIO0B4_I2S8CHSDO0_NAME, GPIO0B_I2S_8CH_SDO0);
-			//rk30_mux_api_set(GPIO0B5_I2S8CHSDO1_NAME, GPIO0B_I2S_8CH_SDO1);
-			//rk30_mux_api_set(GPIO0B6_I2S8CHSDO2_NAME, GPIO0B_I2S_8CH_SDO2);
-			//rk30_mux_api_set(GPIO0B7_I2S8CHSDO3_NAME, GPIO0B_I2S_8CH_SDO3);        
+			rk30_mux_api_set(GPIO0B5_I2S8CHSDO1_NAME, GPIO0B_I2S_8CH_SDO1);
+			rk30_mux_api_set(GPIO0B6_I2S8CHSDO2_NAME, GPIO0B_I2S_8CH_SDO2);
+			rk30_mux_api_set(GPIO0B7_I2S8CHSDO3_NAME, GPIO0B_I2S_8CH_SDO3);        
 			break;
         case 1:
 			rk30_mux_api_set(GPIO0C0_I2S12CHCLK_NAME, GPIO0C_I2S1_2CH_CLK);
@@ -657,7 +661,8 @@ static int __devinit rockchip_i2s_probe(struct platform_device *pdev)
 	i2s->dma_playback->client = &rk29_dma_client_out;
 	i2s->dma_playback->dma_size = 4;
 	i2s->dma_playback->flag = 0;			//add by sxj, used for burst change
-#ifdef CONFIG_SND_I2S_DMA_EVENT_STATIC
+	
+#ifdef CONFIG_SND_DMA_EVENT_STATIC
 	 WARN_ON(rk29_dma_request(i2s->dma_playback->channel, i2s->dma_playback->client, NULL));
 	 WARN_ON(rk29_dma_request(i2s->dma_capture->channel, i2s->dma_capture->client, NULL));
 #endif

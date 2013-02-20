@@ -199,7 +199,9 @@ struct rk_lcdc_device_driver{
 	struct completion  frame_done;		  //sync for pan_display,whe we set a new frame address to lcdc register,we must make sure the frame begain to display
 	spinlock_t  cpl_lock; 			 //lock for completion  frame done
 	int first_frame ;
-
+	int x_scale;
+	int y_scale;
+//$_rbox_$_modify_end
 	struct rk29fb_info *screen_ctr_info;
 	int (*open)(struct rk_lcdc_device_driver *dev_drv,int layer_id,bool open);
 	int (*init_lcdc)(struct rk_lcdc_device_driver *dev_drv);
@@ -214,7 +216,9 @@ struct rk_lcdc_device_driver{
 	int (*get_layer_state)(struct rk_lcdc_device_driver *dev_drv,int layer_id);
 	int (*ovl_mgr)(struct rk_lcdc_device_driver *dev_drv,int swap,bool set);  //overlay manager
 	int (*fps_mgr)(struct rk_lcdc_device_driver *dev_drv,int fps,bool set);
-	
+	int (*set_dsp_lut)(struct rk_lcdc_device_driver *dev_drv,int *lut);
+	int (*read_dsp_lut)(struct rk_lcdc_device_driver *dev_drv,int *lut);
+	//$_rbox_$_modify_end
 };
 
 struct rk_fb_inf {

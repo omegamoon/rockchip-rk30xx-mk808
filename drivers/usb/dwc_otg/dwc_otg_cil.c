@@ -729,8 +729,18 @@ void dwc_otg_core_dev_init(dwc_otg_core_if_t *_core_if)
     dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[0], 0x01000130 );	//ep1 tx fifo
     dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[1], 0x00800230 );	//ep3 tx fifo
     dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[2], 0x008002b0 );	//ep5 tx fifo
-    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[2], 0x00800330 );	//ep7 tx fifo
-    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[2], 0x001003b0 );	//ep9 tx fifo
+    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[3], 0x00800330 );	//ep7 tx fifo
+    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[4], 0x001003b0 );	//ep9 tx fifo
+#endif
+#ifdef CONFIG_ARCH_RK2928  //@lyz the same with RK30
+    /* Configure data FIFO sizes, RK30 otg has 0x3cc dwords total */
+    dwc_write_reg32( &global_regs->grxfsiz, 0x00000120 );
+    dwc_write_reg32( &global_regs->gnptxfsiz, 0x00100120 );             //ep0 tx fifo 
+    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[0], 0x01000130 );   //ep1 tx fifo 256*4Byte
+    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[1], 0x00800230 );   //ep3 tx fifo 128*4Byte
+    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[2], 0x008002b0 );   //ep5 tx fifo 128*4Byte
+    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[3], 0x00800330 );   //ep7 tx fifo 128*4Byte
+    dwc_write_reg32( &global_regs->dptxfsiz_dieptxf[4], 0x001003b0 );   //ep9 tx fifo 16*4Byte
 #endif
 	if(_core_if->en_multiple_tx_fifo && _core_if->dma_enable)
 	{
@@ -940,15 +950,26 @@ void dwc_otg_core_host_init(dwc_otg_core_if_t *_core_if)
 
 		/* Non-periodic Tx FIFO */
 		DWC_DEBUGPL(DBG_CIL,"initial gnptxfsiz=%08x\n", dwc_read_reg32(&global_regs->gnptxfsiz));
-		nptxfifosize.b.depth  = 0x0080;//params->host_nperio_tx_fifo_size;
+	/*$_rbox_$_modify_$_begin_$_zhangxueguang_$_20120522_$*/	
+	#ifdef CONFIG_ARCH_RK29
+		nptxfifosize.b.depth  = 0x0088;//params->host_nperio_tx_fifo_size;
+	#else
+		nptxfifosize.b.depth  = 0x0080;//params->host_nperio_tx_fifo_size;	    
+	#endif
 		nptxfifosize.b.startaddr = 0x0200;//params->host_rx_fifo_size;
 		dwc_write_reg32(&global_regs->gnptxfsiz, nptxfifosize.d32);
 		DWC_DEBUGPL(DBG_CIL,"new gnptxfsiz=%08x\n", dwc_read_reg32(&global_regs->gnptxfsiz));
 		
 		/* Periodic Tx FIFO */
 		DWC_DEBUGPL(DBG_CIL,"initial hptxfsiz=%08x\n", dwc_read_reg32(&global_regs->hptxfsiz));
-		ptxfifosize.b.depth	 = 0x0200;//params->host_perio_tx_fifo_size;
-		ptxfifosize.b.startaddr = 0x0280;//nptxfifosize.b.startaddr + nptxfifosize.b.depth;
+	#ifdef CONFIG_ARCH_RK29
+		ptxfifosize.b.depth	 = 0x0108;//params->host_perio_tx_fifo_size;
+		ptxfifosize.b.startaddr = 0x0288;//nptxfifosize.b.startaddr + nptxfifosize.b.depth;
+	#else
+		ptxfifosize.b.depth  = 0x0200;//params->host_perio_tx_fifo_size;
+		ptxfifosize.b.startaddr = 0x0280;//nptxfifosize.b.startaddr + nptxfifosize.b.depth;	    
+	#endif
+	/*$_rbox_$_modify_$_end_$_zhangxueguang_$_20120522_$*/
 		dwc_write_reg32(&global_regs->hptxfsiz, ptxfifosize.d32);
 		DWC_DEBUGPL(DBG_CIL,"new hptxfsiz=%08x\n", dwc_read_reg32(&global_regs->hptxfsiz));
 	}

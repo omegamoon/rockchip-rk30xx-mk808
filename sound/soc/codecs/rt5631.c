@@ -26,7 +26,6 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
-#include <linux/switch.h>
 
 #include "rt5631.h"
 #include <linux/timer.h>
@@ -40,7 +39,7 @@
 
 #define RT5631_ALC_DAC_FUNC_ENA 0	//ALC functio for DAC
 #define RT5631_ALC_ADC_FUNC_ENA 1	//ALC function for ADC
-#define RT5631_SPK_TIMER	1	//if enable this, MUST enable RT5631_EQ_FUNC_ENA first!
+#define RT5631_SPK_TIMER	0	//if enable this, MUST enable RT5631_EQ_FUNC_ENA first!
 
 struct rt5631_priv {
 	int codec_version;
@@ -49,7 +48,6 @@ struct rt5631_priv {
 	int dmic_used_flag;
 	int eq_mode;
 	int pll_used_flag;
-	struct switch_dev headset_sdev;
 };
 #if (RT5631_SPK_TIMER == 1)
 static struct timer_list spk_timer;
@@ -58,12 +56,9 @@ static bool last_is_spk = false;	// need modify.
 #endif
 
 static struct snd_soc_codec *rt5631_codec;
-struct delayed_work rt5631_delay_cap; //bard 7-16
-EXPORT_SYMBOL(rt5631_delay_cap); //bard 7-16
 static const u16 rt5631_reg[0x80];
 static int timesofbclk = 32;
 bool isPlaybackon = false, isCaptureon = false;
-static struct rt5631_priv *g_rt5631;
 
 module_param(timesofbclk, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(timeofbclk, "relationship between bclk and fs");
@@ -152,14 +147,10 @@ struct rt5631_init_reg {
 };
 
 #ifndef DEF_VOL
-#define DEF_VOL					0xc6//0xd4 -30dB 0xc0 0dB
+#define DEF_VOL					0xd4//0xd4 -30dB 0xc0 0dB
 #endif
 #ifndef DEF_VOL_SPK
-#ifdef CONFIG_MALATA_C7011
-#define DEF_VOL_SPK				0xc9
-#else
-#define DEF_VOL_SPK				0xc9
-#endif
+#define DEF_VOL_SPK				0xc4
 #endif
 
 /*
@@ -184,25 +175,15 @@ static struct rt5631_init_reg init_list[] = {
 	{RT5631_MONO_AXO_1_2_VOL	, 0xf0c0},//AXO1/AXO2 channel volume select OUTMIXER,0DB by default
 	//{RT5631_STEREO_DAC_VOL_1	, 0x004C},
 	{RT5631_ADC_REC_MIXER		, 0xb0f0},//Record Mixer source from Mic1 by default
-	{RT5631_ADC_CTRL_1		, 0x8086},//STEREO ADC CONTROL 1
-#ifdef CONFIG_MALATA_C7011
-	{RT5631_MIC_CTRL_2		, 0x4400},//Mic1/Mic2 boost 40DB by default
-#else
-	{RT5631_MIC_CTRL_2		, 0x3300},//Mic1/Mic2 boost 35DB by default
-#endif
+	{RT5631_ADC_CTRL_1		, 0x0006},//STEREO ADC CONTROL 1
+	{RT5631_MIC_CTRL_2		, 0x4400},//0x8800},//0x6600}, //Mic1/Mic2 boost 40DB by default
 	{RT5631_PWR_MANAG_ADD1		, 0x93e0},
 	
 #if RT5631_ALC_ADC_FUNC_ENA	
 
 	{RT5631_ALC_CTRL_1		, 0x0a0f},//ALC CONTROL 1
-//	{RT5631_ALC_CTRL_2		, 0x0005},//ALC CONTROL 2
-#ifdef CONFIG_MALATA_C7011
-	{RT5631_ALC_CTRL_2		, 0x0003},//ALC CONTROL 2
-	{RT5631_ALC_CTRL_3		, 0xe081},//ALC CONTROL 3
-#else
 	{RT5631_ALC_CTRL_2		, 0x0005},//ALC CONTROL 2
-	{RT5631_ALC_CTRL_3		, 0xe081},//ALC CONTROL 3
-#endif
+	{RT5631_ALC_CTRL_3		, 0xe080},//ALC CONTROL 3
 	
 #endif	
 	{RT5631_OUTMIXER_L_CTRL		, 0xdfC0},//DAC_L-->OutMixer_L by default
@@ -212,11 +193,11 @@ static struct rt5631_init_reg init_list[] = {
 	{RT5631_SPK_MIXER_CTRL		, 0xd8d8},//DAC-->SpeakerMixer
 	{RT5631_SPK_MONO_OUT_CTRL	, 0x6c00},//Speaker volume-->SPOMixer(L-->L,R-->R)	
 	{RT5631_GEN_PUR_CTRL_REG	, 0x4e00},//Speaker AMP ratio gain is 1.27x
-//#if defined(CONFIG_ADJUST_VOL_BY_CODEC)
+#if defined(CONFIG_ADJUST_VOL_BY_CODEC)
 	{RT5631_SPK_MONO_HP_OUT_CTRL	, 0x0000},//HP from outputmixer,speaker out from SpeakerOut Mixer	
-//#else
-//	{RT5631_SPK_MONO_HP_OUT_CTRL	, 0x000c},//HP from DAC,speaker out from SpeakerOut Mixer
-//#endif
+#else
+	{RT5631_SPK_MONO_HP_OUT_CTRL	, 0x000c},//HP from DAC,speaker out from SpeakerOut Mixer
+#endif
 	{RT5631_DEPOP_FUN_CTRL_2	, 0x8000},//HP depop by register control	
 	{RT5631_INT_ST_IRQ_CTRL_2	, 0x0f18},//enable HP zero cross	
 	{RT5631_MIC_CTRL_1		, 0x8000},//set mic 1 to differnetial mode
@@ -293,25 +274,7 @@ static int rt5631_reg_init(struct snd_soc_codec *codec)
 
 	return 0;
 }
-//bard 7-16 s
-void rt5631_adc_on(void)
-{
-	int val;
 
-	val = snd_soc_read(rt5631_codec,RT5631_ADC_REC_MIXER);
-	snd_soc_write(rt5631_codec,RT5631_ADC_REC_MIXER,0xf0f0);
-
-	snd_soc_update_bits(rt5631_codec, RT5631_PWR_MANAG_ADD1,
-		PWR_ADC_L_CLK | PWR_ADC_R_CLK, 0);
-	snd_soc_update_bits(rt5631_codec, RT5631_PWR_MANAG_ADD1,
-		PWR_ADC_L_CLK | PWR_ADC_R_CLK,
-		PWR_ADC_L_CLK | PWR_ADC_R_CLK);
-	snd_soc_write(rt5631_codec,RT5631_ADC_REC_MIXER,val);
-	snd_soc_update_bits(rt5631_codec, RT5631_ADC_CTRL_1,
-				RT_L_MUTE|RT_R_MUTE,0x0);
-
-}
-//bard 7-16 e
 static const char *rt5631_spol_source_sel[] = {
 	"SPOLMIX", "MONOIN_RX", "VDAC", "DACL"};
 static const char *rt5631_spor_source_sel[] = {
@@ -444,23 +407,18 @@ static void spk_work_handler(struct work_struct *work)
 {
 	struct snd_soc_codec *codec = rt5631_codec;
 	bool is_spk = (rt5631_read(codec, 0x4a)) & 0x04;	//detect rt5631 reg4a[3], 1'b:SPK, 0'b:HP ;
-	if(last_is_spk != is_spk){
+	if(last_is_spk != is_spk)
 		printk("%s---%s is in use.last is %s in use\n", __FUNCTION__,is_spk?"speaker":"headphone",last_is_spk?"speaker":"headphone");
-		switch_set_state(&g_rt5631->headset_sdev,( (is_spk == false) ? 1 : 0));
-	}
-
+		
 	if(is_spk && !last_is_spk){
 		rt5631_write_index_mask(codec,0x11,0x0000,0x0007);	//0db
 		rt5631_write_index(codec,0x12,0x0003);			//0db
 		rt5631_update_eqmode(codec, SPK_FR);		// SPK is in use, enable EQ mode of SPK_FR.
-		msleep(200);
-		rt5631_write_mask(codec,0x02,0x0000,0x8080);
 	}else if(!is_spk && last_is_spk){
 	//flove071311	rt5631_update_eqmode(codec, NORMAL);		// HP is in use, enable EQ mode of NORMAL.
 		rt5631_write_index_mask(codec,0x11,0x0001,0x0003);
 		rt5631_write_index(codec,0x12,0x0001);	
 		rt5631_update_eqmode(codec,HFREQ);		
-		rt5631_write_mask(codec,0x02,0x8080,0x8080);
 	}
 	last_is_spk = is_spk;
 }
@@ -473,7 +431,7 @@ void spk_timer_callback(unsigned long data )
 	schedule_work(&spk_work);
 
 	//DBG("Starting timer to fire in 1000ms (%ld)\n", jiffies );
-  ret = mod_timer(&spk_timer, jiffies + msecs_to_jiffies(500));
+  ret = mod_timer(&spk_timer, jiffies + msecs_to_jiffies(1000));
   if (ret) printk("Error in mod_timer\n");
 }
 #endif
@@ -1092,20 +1050,7 @@ static int adc_event(struct snd_soc_dapm_widget *w,
 			pmu = true;
 		}
 		break;
-//jerome 8-21 s
-	case SND_SOC_DAPM_POST_PMU:
-		DBG("yemk:adc_event SND_SOC_DAPM_POST_PMU\n");
-		mdelay(150);
-		rt5631_write_mask(codec, RT5631_ADC_CTRL_1, 0,
-			RT_L_MUTE | RT_R_MUTE);
-		break;
-	case SND_SOC_DAPM_PRE_PMD:
-		DBG("yemk:adc_event SND_SOC_DAPM_PRE_PMD\n");
-		rt5631_write_mask(codec, RT5631_ADC_CTRL_1,
-			RT_L_MUTE | RT_R_MUTE, 
-			RT_L_MUTE | RT_R_MUTE);
-		break;
-//jerome 8-21 e
+
 	default:
 		break;
 	}
@@ -1174,12 +1119,10 @@ SND_SOC_DAPM_MIXER("ADC Mixer", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 SND_SOC_DAPM_ADC_E("Left ADC", "Left ADC HIFI Capture",
 		RT5631_PWR_MANAG_ADD1, 11, 0,
-		adc_event, SND_SOC_DAPM_POST_PMD | SND_SOC_DAPM_PRE_PMU|
-		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMU), //jerome 8-21 
+		adc_event, SND_SOC_DAPM_POST_PMD | SND_SOC_DAPM_PRE_PMU),
 SND_SOC_DAPM_ADC_E("Right ADC", "Right ADC HIFI Capture",
 		RT5631_PWR_MANAG_ADD1, 10, 0,
-		adc_event, SND_SOC_DAPM_POST_PMD | SND_SOC_DAPM_PRE_PMU|
-		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMU), //jerome 8-21
+		adc_event, SND_SOC_DAPM_POST_PMD | SND_SOC_DAPM_PRE_PMU),
 SND_SOC_DAPM_DAC_E("Left DAC", "Left DAC HIFI Playback",
 		RT5631_PWR_MANAG_ADD1, 9, 0,
 		dac_event, SND_SOC_DAPM_POST_PMD | SND_SOC_DAPM_PRE_PMU),
@@ -2000,17 +1943,6 @@ static int rt5631_probe(struct snd_soc_codec *codec)
 	struct rt5631_priv *rt5631 = snd_soc_codec_get_drvdata(codec);
 	unsigned int val;
 	int ret;
-
-	rt5631->headset_sdev.name = "h2w";
-
-	ret = switch_dev_register(&rt5631->headset_sdev);
-	if (ret) {
-		pr_err("Unable to register switch device\n");
-		return ret;
-	}
-
-	g_rt5631 =  rt5631;
-
 	ret = snd_soc_codec_set_cache_io(codec, 8, 16, SND_SOC_I2C);
 	if (ret != 0) {
 		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
@@ -2052,9 +1984,7 @@ static int rt5631_probe(struct snd_soc_codec *codec)
 
 	INIT_WORK(&spk_work, spk_work_handler);
 #endif
-//bard 7-16 s
-	INIT_DELAYED_WORK(&rt5631_delay_cap,rt5631_adc_on);
-//bard 7-16 e
+
 	snd_soc_add_controls(codec, rt5631_snd_controls,
 		ARRAY_SIZE(rt5631_snd_controls));
 	rt5631_add_widgets(codec);

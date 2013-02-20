@@ -310,6 +310,154 @@ static int win1_open(struct rk30_lcdc_device *lcdc_dev,bool open)
 	return 0;
 }
 
+//$_rbox_$_modify_$ zhy added for hardware cursor
+static int cursor_open(struct rk30_lcdc_device *lcdc_dev, bool open)
+{
+	spin_lock(&lcdc_dev->reg_lock);
+	if(likely(lcdc_dev->clk_on))
+	{
+//		lcdc_dev->driver.layer_cursor.state = open;	
+		LcdMskReg(lcdc_dev, SYS_CTRL1, m_HWC_EN | m_HWC_SIZE_SELET, v_HWC_EN(open) | v_HWC_SIZE_SELET(0));
+		LCDC_REG_CFG_DONE();
+	}
+	spin_unlock(&lcdc_dev->reg_lock);
+//	printk(KERN_INFO "lcdc%d cursor %s\n",lcdc_dev->id,open?"open":"closed");
+	return 0;
+}
+
+#include <asm/cacheflush.h>
+
+#define CURSOR_BUF_SIZE	256
+#define CURSOR_WRITE_BIT(addr,mask,value)		(*((char*)addr)) = (((*((char*)addr))&(~((char)mask)))|((char)value))
+static char cursor_buf[CURSOR_BUF_SIZE] = {
+0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0xf5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0xd5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x55, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x55, 0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x45, 0xf5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0xd5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x54, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x50, 0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x40, 0xf5, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0xd5, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x54, 0xff, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x50, 0xfd, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x40, 0xf5, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x00, 0xd5, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x00, 0x54, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x00, 0x50, 0xfd, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x00, 0x40, 0xf5, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x00, 0x00, 0xd5, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x40, 0x55, 0x55, 0xff, 0xff, 0xff, 
+0x05, 0x00, 0x50, 0x55, 0x55, 0xfd, 0xff, 0xff, 
+0x05, 0x00, 0x50, 0xfd, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x14, 0x40, 0xf5, 0xff, 0xff, 0xff, 0xff, 
+0x05, 0x15, 0x40, 0xf5, 0xff, 0xff, 0xff, 0xff, 
+0x45, 0x55, 0x00, 0xf5, 0xff, 0xff, 0xff, 0xff, 
+0x55, 0x5f, 0x00, 0xd5, 0xff, 0xff, 0xff, 0xff, 
+0xd5, 0x5f, 0x01, 0xd4, 0xff, 0xff, 0xff, 0xff, 
+0xf5, 0x7f, 0x01, 0x54, 0xff, 0xff, 0xff, 0xff, 
+0xfd, 0x7f, 0x05, 0x50, 0xff, 0xff, 0xff, 0xff, 
+0xff, 0xff, 0x05, 0x50, 0xff, 0xff, 0xff, 0xff, 
+0xff, 0xff, 0x15, 0x55, 0xff, 0xff, 0xff, 0xff, 
+0xff, 0xff, 0x57, 0xd5, 0xff, 0xff, 0xff, 0xff,
+};
+
+static int rk30_cursor_set_image(struct rk_lcdc_device_driver *dev_drv,char *imgdata)
+{
+	struct rk30_lcdc_device *lcdc_dev = container_of(dev_drv,struct rk30_lcdc_device,driver);
+	int x, y;
+	char *pmsk = imgdata;
+	char  *dst = (char*)cursor_buf;
+	unsigned char  dmsk = 0;
+	unsigned int   op,shift,offset;
+
+//	memset(cursor_buf, 0x00, CURSOR_BUF_SIZE);
+//	/* cursor is a 2 bpp 32x32 bitmap this routine
+//	 * clears it to transparent then combines the cursor
+//	 * shape plane with the colour plane to set the
+//	 * cursor */
+//	for(y = 0; y < 11; y++)
+//	{
+//		for(x = 0; x < 32; x++)
+//		{
+//			shift = (64*y + 2*x)%8;
+//			offset = (64*y + 2*x)/8;
+////			printk("offset is %d, dmsk is %02x\n", offset, dmsk);
+//			CURSOR_WRITE_BIT((dst + offset),(3 << shift),(1 << shift));
+//		}
+//	}
+//	for(y = 11; y < 22; y++)
+//	{
+//		for(x = 0; x < 32; x++)
+//		{
+//			shift = (64*y + 2*x)%8;
+//			offset = (64*y + 2*x)/8;
+////			printk("offset is %d, dmsk is %02x\n", offset, dmsk);
+//			CURSOR_WRITE_BIT((dst + offset),(3 << shift),(2 << shift));
+//		}
+//	}
+//	for(offset = 0; offset < CURSOR_BUF_SIZE; offset++)
+//	{
+//		printk("%02x ", cursor_buf[offset]);
+//		if((offset+1)%8 == 0)
+//			printk("\n");
+//	}
+//	printk("cursor_buf is 0x%08x 0x%08x\n\n", cursor_buf, __pa(cursor_buf));
+	
+//	for (y = 0; y < 32; y++)
+//	{
+//		for (x = 0; x < 32; x++)
+//		{
+//			if ((x % 8) == 0) {
+//				dmsk = *pmsk++;
+//			} else {
+//				dmsk <<= 1;
+//			}
+//			op = (dmsk & 0x80) ? 2 : 3;
+//			shift = (x*2)%8;
+//			offset = x/4;
+//			CURSOR_WRITE_BIT((dst+offset),(3<<shift),(op<<shift));
+//		}
+//		dst += 8;
+//	}
+//	flush_cache_all();
+//	msleep(10);
+    LcdWrReg(lcdc_dev, HWC_MST, __pa(cursor_buf));
+    LcdMskReg(lcdc_dev, SYS_CTRL0, m_HWC_RELOAD_EN, v_HWC_RELOAD_EN(1));
+    LCDC_REG_CFG_DONE();
+
+    return 0;
+}
+
+static int rk30_cursor_set_cmap(struct rk_lcdc_device_driver *dev_drv, int background, int frontground)
+{
+	struct rk30_lcdc_device *lcdc_dev = container_of(dev_drv,struct rk30_lcdc_device,driver);
+	
+//	printk(KERN_INFO "lcdc%d cursor bg %08x fg %08x\n",lcdc_dev->id, background, frontground);
+	LcdMskReg(lcdc_dev, HWC_COLOR_LUT0, m_HWC_R|m_HWC_G|m_HWC_B, 0x000000);
+	LcdMskReg(lcdc_dev, HWC_COLOR_LUT1, m_HWC_R|m_HWC_G|m_HWC_B, 0xFFFFFF);
+//	LcdMskReg(lcdc_dev, HWC_COLOR_LUT2, m_HWC_R|m_HWC_G|m_HWC_B, 0xFF0000);
+	LCDC_REG_CFG_DONE();
+	return 0;
+}
+
+static int rk30_cursor_set_pos(struct rk_lcdc_device_driver *dev_drv, int x, int y)
+{
+	struct rk30_lcdc_device *lcdc_dev = container_of(dev_drv,struct rk30_lcdc_device,driver);
+	struct layer_par *par=dev_drv->layer_par[0];
+	int xpos, ypos;
+	
+	xpos = (x * dev_drv->screen->x_res * dev_drv->x_scale/100)/1280;
+	ypos = (y * dev_drv->screen->y_res * dev_drv->y_scale/100)/720;
+	xpos += dev_drv->screen->x_res * (100 - dev_drv->x_scale)/200 + dev_drv->screen->left_margin + dev_drv->screen->hsync_len;
+	ypos += dev_drv->screen->y_res * (100 - dev_drv->y_scale)/200 + dev_drv->screen->upper_margin + dev_drv->screen->vsync_len;
+//	printk(KERN_INFO "lcdc%d cursor xpos %d ypos %d\n",lcdc_dev->id, xpos, ypos);
+    LcdWrReg(lcdc_dev, HWC_DSP_ST, v_DSP_STX(xpos)|v_DSP_STY(ypos));
+	LCDC_REG_CFG_DONE();
+}
+//$_rbox_$_modify_end
 
 static int rk30_lcdc_blank(struct rk_lcdc_device_driver*lcdc_drv,int layer_id,int blank_mode)
 {
@@ -640,6 +788,38 @@ int rk30_lcdc_ioctl(struct rk_lcdc_device_driver * dev_drv,unsigned int cmd, uns
             		if(copy_to_user(argp, panel_size, 8)) 
 				return -EFAULT;
 			break;
+		case FBIOPUT_SET_CURSOR_EN:
+			{
+				int en;
+				if(copy_from_user(&en, (void*)arg, sizeof(int)))
+				    return -EFAULT;
+				ret = cursor_open(lcdc_dev, en);
+			}
+			break;
+		case FBIOPUT_SET_CURSOR_POS:
+			{
+				struct fbcurpos pos;
+				if(copy_from_user(&pos, (void*)arg, sizeof(struct fbcurpos)))
+			   		return -EFAULT;
+				rk30_cursor_set_pos(dev_drv, pos.x , pos.y);
+			}
+			break;
+		case FBIOPUT_SET_CURSOR_IMG:
+			{
+				char cursor_buf[CURSOR_BUF_SIZE];
+				if(copy_from_user(cursor_buf, (void*)arg, CURSOR_BUF_SIZE))
+					return -EFAULT;
+				rk30_cursor_set_image(dev_drv, cursor_buf);
+			}
+			break;
+		case FBIOPUT_SET_CURSOR_CMAP:
+			{
+				struct fb_image img;
+				if(copy_from_user(&img, (void*)arg, sizeof(struct fb_image)))
+				    return -EFAULT;
+				rk30_cursor_set_cmap(dev_drv, img.bg_color, img.fg_color);
+			}
+			break;
 		default:
 			break;
 	}
@@ -745,6 +925,36 @@ static int rk30_lcdc_fps_mgr(struct rk_lcdc_device_driver *dev_drv,int fps,bool 
 	screen->ft = 1000/fps ;  //one frame time in ms
 	return fps;
 }
+
+//$_rbox_$_modify_$ zhy modified for box display system	
+static int rk30_read_dsp_lut(struct rk_lcdc_device_driver *dev_drv,int *lut)
+{
+	return 0;
+}
+
+static int rk30_set_dsp_lut(struct rk_lcdc_device_driver *dev_drv,int *lut)
+{
+	int i=0;
+	int __iomem *c;
+	int v;
+
+	struct rk30_lcdc_device *lcdc_dev = container_of(dev_drv,struct rk30_lcdc_device,driver);
+	LcdMskReg(lcdc_dev,SYS_CTRL1,m_DSP_LUT_RAM_EN,v_DSP_LUT_RAM_EN(0));
+	LCDC_REG_CFG_DONE();
+	msleep(25);
+	for(i=0;i<256;i++)
+	{
+//		v = dev_drv->screen->dsp_lut[i] = lut[i];
+		v = lut[i];
+		c = lcdc_dev->dsp_lut_addr_base+i;
+		writel_relaxed(v,c);
+		
+	}
+	LcdMskReg(lcdc_dev,SYS_CTRL1,m_DSP_LUT_RAM_EN,v_DSP_LUT_RAM_EN(1));
+	LCDC_REG_CFG_DONE();
+	return 0;
+}
+//$_rbox_$_modify_end
 int rk30_lcdc_early_suspend(struct rk_lcdc_device_driver *dev_drv)
 {
 	struct rk30_lcdc_device *lcdc_dev = container_of(dev_drv,struct rk30_lcdc_device,driver);
@@ -846,6 +1056,10 @@ static struct rk_lcdc_device_driver lcdc_driver = {
 	.ovl_mgr		= rk30_lcdc_ovl_mgr,
 	.get_disp_info		= rk30_lcdc_get_disp_info,
 	.fps_mgr		= rk30_lcdc_fps_mgr,
+	//$_rbox_$_modify_$ zhy modified for box display system	
+	.set_dsp_lut            = rk30_set_dsp_lut,
+	.read_dsp_lut            = rk30_read_dsp_lut,
+	//$_rbox_$_modify_end
 };
 #ifdef CONFIG_PM
 static int rk30_lcdc_suspend(struct platform_device *pdev, pm_message_t state)
@@ -920,6 +1134,9 @@ static int __devinit rk30_lcdc_probe (struct platform_device *pdev)
 	
     	lcdc_dev->preg = (LCDC_REG*)lcdc_dev->reg_vir_base;
 	printk("lcdc%d:reg_phy_base = 0x%08x,reg_vir_base:0x%p\n",pdev->id,lcdc_dev->reg_phy_base, lcdc_dev->preg);
+	//$_rbox_$_modify_$ zhy modified for box display system	
+	lcdc_dev->dsp_lut_addr_base = &lcdc_dev->preg->DSP_LUT_ADDR;
+	//$_rbox_$_modify_end
 	lcdc_dev->driver.dev=&pdev->dev;
 	lcdc_dev->driver.screen = screen;
 	lcdc_dev->driver.screen_ctr_info = screen_ctr_info;

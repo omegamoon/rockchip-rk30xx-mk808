@@ -6,25 +6,6 @@
 #include <linux/device.h>
 #include <linux/rk_screen.h>
 
-enum {
-        I2C_IDLE = 0,
-        I2C_SDA_LOW,
-        I2C_SCL_LOW,
-        BOTH_LOW,
-};
-struct rk30_i2c_platform_data {
-	char *name;
-	int bus_num;
-#define I2C_RK29_ADAP   0
-#define I2C_RK30_ADAP   1
-	int adap_type;
-	int is_div_from_arm;
-	u32 flags;
-	int (*io_init)(void);
-	int (*io_deinit)(void);
-        int (*check_idle)(void);
-};
-
 struct spi_cs_gpio {
 	const char *name;
 	unsigned int cs_gpio;
@@ -174,6 +155,8 @@ struct rk29_vmac_platform_data {
 	int (*rmii_io_init)(void);
 	int (*rmii_io_deinit)(void);
 	int (*rmii_power_control)(int enable);
+//$_rbox_$_modify_$_chenzhi_20120523: switch speed between 10M and 100M
+	int (*rmii_speed_switch)(int speed);
 };
 
 #define BOOT_MODE_NORMAL		0

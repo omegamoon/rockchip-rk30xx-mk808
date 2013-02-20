@@ -2,6 +2,8 @@
 # Makefile for DWC_otg Highspeed USB controller driver
 #
 
+ifeq ($(CONFIG_ARCH_RK30),y)
+
 ifeq ($(CONFIG_DWC_OTG_DEBUG),y)
 EXTRA_CFLAGS   += -DDEBUG
 endif
@@ -31,3 +33,7 @@ dwc_otg-objs    += dwc_otg_pcd.o dwc_otg_pcd_intr.o
 dwc_otg-objs    += dwc_otg_hcd.o dwc_otg_hcd_intr.o dwc_otg_hcd_queue.o
 
 obj-$(CONFIG_DWC_OTG) := dwc_otg.o
+
+else
+obj-y		+= dwc_otg_rk29/
+endif

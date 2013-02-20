@@ -271,6 +271,7 @@ static irqreturn_t handle_twl6030_vlow(int irq, void *unused)
 #else
 	pr_err("twl6030: BAT_VLOW interrupt; threshold=%dmV\n",
 	       2300 + (vbatmin_hi_threshold - 0b110) * 50);
+
 #if 1 /* temporary */
 	pr_err("%s: disabling BAT_VLOW interrupt\n", __func__);
 	disable_irq_nosync(twl6030_irq_base + TWL_VLOW_INTR_OFFSET);
@@ -496,6 +497,7 @@ int twl6030_init_irq(int irq_num, unsigned irq_base, unsigned irq_end,
 	int	i;
 	int ret;
 	u8 mask[4];
+	u8 reg;
 
 	static struct irq_chip	twl6030_irq_chip;
 
@@ -556,6 +558,9 @@ int twl6030_init_irq(int irq_num, unsigned irq_base, unsigned irq_end,
 	status = twl6030_vlow_init(twl6030_irq_base + TWL_VLOW_INTR_OFFSET);
 	if (status < 0)
 		goto fail_vlow;
+	
+	twl_i2c_write_u8(TWL_MODULE_PIH, &reg,REG_INT_MSK_STS_A);
+	twl_i2c_write_u8(TWL_MODULE_PIH, reg | (1 << 2),REG_INT_MSK_STS_A);   //close vlow interrupt
 
 	return status;
 

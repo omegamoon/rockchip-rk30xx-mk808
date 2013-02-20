@@ -301,7 +301,13 @@ kernel.img: Image FORCE
 else
 kernel.img: Image FORCE
 	$(Q)$(srctree)/mkkrnlimg $(obj)/arch/arm/boot/Image $(obj)/kernel.img
+	$(Q)cp -a $(obj)/arch/arm/boot/Image  $(obj)/Image
 	@echo '  Image:  $@ is ready'
+	
+tvbox: Image FORCE
+	$(Q)$(srctree)/mkkrnlimg $(obj)/arch/arm/boot/Image $(obj)/kernel.img tvbox
+	$(Q)cp -a $(obj)/kernel.img  $(obj)/Image
+	@echo '  Image:  $@ kernel.img is ready'
 endif
 
 zkernel.img: zImage FORCE

@@ -4,6 +4,34 @@
 #include <mach/irqs.h>
 #include <linux/init.h>
 
+typedef enum eGPIOPinLevel
+{
+	GPIO_LOW=0,
+	GPIO_HIGH
+}eGPIOPinLevel_t;
+
+typedef enum eGPIOPinDirection
+{
+	GPIO_IN=0,
+	GPIO_OUT
+}eGPIOPinDirection_t;
+
+typedef enum GPIOPullType {
+	PullDisable = 0,
+	PullEnable,
+	GPIONormal,  //PullEnable, please do not use it
+	GPIOPullUp,	//PullEnable, please do not use it
+	GPIOPullDown,//PullEnable, please do not use it
+	GPIONOInit,//PullEnable, please do not use it
+}eGPIOPullType_t;
+
+typedef enum GPIOIntType {
+	GPIOLevelLow=0,
+	GPIOLevelHigh,	 
+	GPIOEdgelFalling,
+	GPIOEdgelRising
+}eGPIOIntType_t;
+
 //定义GPIO相关寄存器偏移地址
 #define 	GPIO_SWPORT_DR		0x00
 #define 	GPIO_SWPORT_DDR		0x04
@@ -40,25 +68,36 @@
 #else
 #define TCA6424_TOTOL_GPIO_NUM	0
 #define TCA6424_TOTOL_GPIO_IRQ_NUM	0
+#define TCA6424_GPIO_EXPANDER_BASE	GPIO_EXPANDER_BASE
 #endif
 
 #if defined(CONFIG_GPIO_WM831X)
 #define WM831X_TOTOL_GPIO_NUM		12
-#define WM831X_GPIO_EXPANDER_BASE	(GPIO_EXPANDER_BASE+TCA6424_TOTOL_GPIO_NUM)
+#define WM831X_GPIO_EXPANDER_BASE	(TCA6424_GPIO_EXPANDER_BASE+TCA6424_TOTOL_GPIO_NUM)
 #else
 #define WM831X_TOTOL_GPIO_NUM	0
-#define WM831X_GPIO_EXPANDER_BASE	(GPIO_EXPANDER_BASE+TCA6424_TOTOL_GPIO_NUM)
+#define WM831X_GPIO_EXPANDER_BASE	(TCA6424_GPIO_EXPANDER_BASE+TCA6424_TOTOL_GPIO_NUM)
 #endif
 
 #if defined (CONFIG_GPIO_WM8994)
 #define CONFIG_GPIO_WM8994_NUM 11
-#define WM8994_GPIO_EXPANDER_BASE (GPIO_EXPANDER_BASE+WM831X_TOTOL_GPIO_NUM)
+#define WM8994_GPIO_EXPANDER_BASE (WM831X_GPIO_EXPANDER_BASE+WM831X_TOTOL_GPIO_NUM)
 #else
 #define CONFIG_GPIO_WM8994_NUM 0
+#define WM8994_GPIO_EXPANDER_BASE (WM831X_GPIO_EXPANDER_BASE+WM831X_TOTOL_GPIO_NUM)
 #endif
 
+#if defined (CONFIG_GPIO_TPS65910)
+#define CONFIG_GPIO_TPS65910_NUM 9
+#define TPS65910_GPIO_EXPANDER_BASE (WM8994_GPIO_EXPANDER_BASE+CONFIG_GPIO_WM8994_NUM)
+#else
+#define CONFIG_GPIO_TPS65910_NUM 0
+#define TPS65910_GPIO_EXPANDER_BASE (WM8994_GPIO_EXPANDER_BASE+CONFIG_GPIO_WM8994_NUM)
+#endif
+
+
 //定义GPIO的PIN口最大数目。CONFIG_SPI_FPGA_GPIO_NUM表示FPGA的PIN脚数。
-#define ARCH_NR_GPIOS  (PIN_BASE + RK30_TOTOL_GPIO_NUM + TCA6424_TOTOL_GPIO_NUM + WM831X_TOTOL_GPIO_NUM + CONFIG_SPI_FPGA_GPIO_NUM+CONFIG_GPIO_WM8994_NUM)
+#define ARCH_NR_GPIOS  (PIN_BASE + RK30_TOTOL_GPIO_NUM + TCA6424_TOTOL_GPIO_NUM + WM831X_TOTOL_GPIO_NUM + CONFIG_SPI_FPGA_GPIO_NUM+CONFIG_GPIO_WM8994_NUM+CONFIG_GPIO_TPS65910_NUM)
 
 #define INVALID_GPIO        	-1
 
@@ -400,10 +439,21 @@
 #define	WM831X_P12 (WM831X_GPIO_EXPANDER_BASE  + 1*NUM_GROUP + 3)
 #endif                                           
 
-#include <plat/gpio.h>
-
 #ifndef __ASSEMBLY__                                         
 extern void __init rk30_gpio_init(void);
+/*-------------------------------------------------------------------------*/
+
+/* wrappers for "new style" GPIO calls. the old RK2818-specfic ones should
+ * eventually be removed (along with this errno.h inclusion), and the
+ * gpio request/free calls should probably be implemented.
+ */
+
+#include <asm/errno.h>
+#include <asm-generic/gpio.h>		/* cansleep wrappers */
+
+#define gpio_get_value	__gpio_get_value
+#define gpio_set_value	__gpio_set_value
+#define gpio_cansleep	__gpio_cansleep
 
 static inline int gpio_to_irq(unsigned gpio)
 {

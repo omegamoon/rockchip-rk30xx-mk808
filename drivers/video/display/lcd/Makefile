@@ -1,4 +1,4 @@
 #
-# Makefile for the jetta tv control.
+# Makefile for the lcd control.
 #
-obj-$(CONFIG_RK610_LCD)			+= rk610_lcd.o
+obj-$(CONFIG_DISPLAY_LCD_SUPPORT)			+= display_lcd_sysfs.o

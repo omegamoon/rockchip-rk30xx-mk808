@@ -23,10 +23,10 @@
 #define I2C_CON_MOD(mod)        ((mod) << 1)
 #define I2C_CON_MASK            (3 << 1)
 enum{
-        I2C_CON_MOD_TX = 0,
-        I2C_CON_MOD_TRX,
-        I2C_CON_MOD_RX,
-        I2C_CON_MOD_RRX,
+    I2C_CON_MOD_TX = 0,
+    I2C_CON_MOD_TRX,
+    I2C_CON_MOD_RX,
+    I2C_CON_MOD_RRX,
 };
 #define I2C_CON_START           (1 << 3)
 #define I2C_CON_STOP            (1 << 4)
@@ -501,8 +501,8 @@ static int rk30_i2c_doxfer(struct rk30_i2c *i2c,
                 if(error < 0)
                         i2c_dbg(i2c->dev, "error = %d\n", error);
                 else if((i2c->complete_what !=COMPLETE_READ  && i2c->complete_what != COMPLETE_WRITE)){
-                        dev_err(i2c->dev, "Addr[0x%02x] wait event timeout, state: %d, is_busy: %d, error: %d, complete_what: 0x%x, ipd: 0x%x\n",
-                                msgs[0].addr, i2c->state, i2c->is_busy, error, i2c->complete_what, i2c_readl(i2c->regs + I2C_IPD)); 
+                        dev_err(i2c->dev, "Addr[0x%02x] wait event timeout, state: %d, is_busy: %d, error: %d, complete_what: 0x%x, ipd: 0x%x\n", 
+                                msgs[0].addr, i2c->state, i2c->is_busy, error, i2c->complete_what, i2c_readl(i2c->regs + I2C_IPD));  
                         //rk30_show_regs(i2c);
                         error = -ETIMEDOUT;
                         msleep(msleep_time);
@@ -510,7 +510,7 @@ static int rk30_i2c_doxfer(struct rk30_i2c *i2c,
                         msleep(1);
                 }
                 else
-                        i2c_dbg(i2c->dev, "Addr[0x%02x] wait event timeout, but transfer complete\n", i2c->addr);
+                        i2c_dbg(i2c->dev, "Addr[0x%02x] wait event timeout, but transfer complete\n", i2c->addr);  
         }
         i2c_writel(I2C_IPD_ALL_CLEAN, i2c->regs + I2C_IPD);
 	rk30_i2c_disable_irq(i2c);
@@ -603,4 +603,5 @@ int i2c_add_rk30_adapter(struct i2c_adapter *adap)
 
         return ret;
 }
+
 

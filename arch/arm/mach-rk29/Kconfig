@@ -8,6 +8,18 @@ choice
 	depends on ARCH_RK29
 	default MACH_RK29SDK
 
+config MACH_RK29_ITV
+        depends on ARCH_RK29
+        bool "ROCKCHIP Board Rk29 For ITV"
+        help
+          Support for the ROCKCHIP Rk29 board for itv
+
+config MACH_RK29_ITV_HOTDOG
+        depends on ARCH_RK29
+        bool "ROCKCHIP Board Rk29 For ITV HOTDOG"
+        help
+          Support for the ROCKCHIP Rk29 board for itv hotdog
+
 config MACH_RK29SDK
 	depends on ARCH_RK29
 	bool "ROCKCHIP Board Rk29 For Sdk"

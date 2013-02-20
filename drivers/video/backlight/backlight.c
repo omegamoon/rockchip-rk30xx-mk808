@@ -240,8 +240,10 @@ static void bl_device_release(struct device *dev)
 	struct backlight_device *bd = to_backlight_device(dev);
 	kfree(bd);
 }
+#if defined(CONFIG_POWER_ON_CHARGER_DISPLAY)
 extern  ssize_t enter_early_charging(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count);
+#endif
 
 static struct device_attribute bl_device_attributes[] = {
 	__ATTR(bl_power, 0644, backlight_show_power, backlight_store_power),
@@ -251,7 +253,9 @@ static struct device_attribute bl_device_attributes[] = {
 		     NULL),
 	__ATTR(max_brightness, 0444, backlight_show_max_brightness, NULL),
 	__ATTR(type, 0444, backlight_show_type, NULL),
+#if defined(CONFIG_POWER_ON_CHARGER_DISPLAY)
 	__ATTR(shutdown, 0666, NULL, enter_early_charging),
+#endif
 	__ATTR_NULL,
 };
 

@@ -131,6 +131,7 @@ int hdmi_set_info(struct rk29fb_screen *screen, unsigned int vic)
     return 0;
 }
 
+#ifdef HDMI_DEBUG
 static void hdmi_show_sink_info(struct hdmi *hdmi)
 {
 	struct list_head *pos, *head = &hdmi->edid.modelist;
@@ -225,6 +226,7 @@ static void hdmi_show_sink_info(struct hdmi *hdmi)
 	}
 	hdmi_dbg(hdmi->dev, "******** Show Sink Info ********\n");
 }
+#endif
 
 /**
  * hdmi_ouputmode_select - select hdmi transmitter output mode: hdmi or dvi?
@@ -507,7 +509,7 @@ int hdmi_switch_fb(struct hdmi *hdmi, int vic)
 
 	if(rc == 0) {		
 		rk_fb_switch_screen(hdmi->lcdc->screen, 1, HDMI_SOURCE_DEFAULT);
-		rk_fb_disp_scale(hdmi->xscale, hdmi->yscale, HDMI_SOURCE_DEFAULT);
+//		rk_fb_disp_scale(hdmi->xscale, hdmi->yscale, HDMI_SOURCE_DEFAULT);
 	}
 	return rc;
 }
@@ -524,4 +526,15 @@ int hdmi_get_hotplug(void)
 		return hdmi->hotplug;
 	else
 		return HDMI_HPD_REMOVED;
+}
+
+void hdmi_init_modelist(struct hdmi *hdmi)
+{
+	int i;
+	struct list_head *head = &hdmi->edid.modelist;
+	
+	INIT_LIST_HEAD(&hdmi->edid.modelist);
+	for(i = 0; i < ARRAY_SIZE(hdmi_mode); i++) {
+		hdmi_add_videomode(&hdmi_mode[i], head);
+	}
 }

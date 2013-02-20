@@ -23,10 +23,6 @@
 #include <linux/skbuff.h>
 #include <linux/spi/spi.h>
 #include <linux/mmc/host.h>
-#ifdef  CONFIG_TPS65910_RK30
-#include <linux/i2c/tps65910.h>
-#endif
-
 #include <linux/ion.h>
 #include <linux/cpufreq.h>
 #include <linux/clk.h>
@@ -55,15 +51,6 @@
 #if defined(CONFIG_SPIM_RK29)
 #include "../../../drivers/spi/rk29_spim.h"
 #endif
-#if defined(CONFIG_MU509)
-#include <linux/mu509.h>
-#endif
-#if defined(CONFIG_MW100)
-#include <linux/mw100.h>
-#endif
-#if defined(CONFIG_MT6229)
-#include <linux/mt6229.h>
-#endif
 #if defined(CONFIG_ANDROID_TIMED_GPIO)
 #include "../../../drivers/staging/android/timed_gpio.h"
 #endif
@@ -76,23 +63,27 @@
 #ifdef CONFIG_TOUCHSCREEN_GT8110_MALATA
 #include <linux/gt8110.h>
 #endif
+#ifdef  CONFIG_THREE_FB_BUFFER
+#define RK30_FB0_MEM_SIZE 12*SZ_1M
+#else
 #define RK30_FB0_MEM_SIZE 8*SZ_1M
+
 
 #ifdef CONFIG_VIDEO_RK29
 /*---------------- Camera Sensor Macro Define Begin  ------------------------*/
 /*---------------- Camera Sensor Configuration Macro Begin ------------------------*/
-#define CONFIG_SENSOR_0 RK29_CAM_SENSOR_GT2005						/* back camera sensor */
+#define CONFIG_SENSOR_0 RK29_CAM_SENSOR_OV5642						/* back camera sensor */
 #define CONFIG_SENSOR_IIC_ADDR_0		0x78
-#define CONFIG_SENSOR_IIC_ADAPTER_ID_0	  3
-#define CONFIG_SENSOR_CIF_INDEX_0                    0
+#define CONFIG_SENSOR_IIC_ADAPTER_ID_0	  4
+#define CONFIG_SENSOR_CIF_INDEX_0                    1
 #define CONFIG_SENSOR_ORIENTATION_0 	  90
 #define CONFIG_SENSOR_POWER_PIN_0		  INVALID_GPIO
 #define CONFIG_SENSOR_RESET_PIN_0		  INVALID_GPIO
-#define CONFIG_SENSOR_POWERDN_PIN_0 	  RK30_PIN1_PB6
+#define CONFIG_SENSOR_POWERDN_PIN_0 	  RK30_PIN1_PD6
 #define CONFIG_SENSOR_FALSH_PIN_0		  INVALID_GPIO
 #define CONFIG_SENSOR_POWERACTIVE_LEVEL_0 RK29_CAM_POWERACTIVE_L
 #define CONFIG_SENSOR_RESETACTIVE_LEVEL_0 RK29_CAM_RESETACTIVE_L
-#define CONFIG_SENSOR_POWERDNACTIVE_LEVEL_0 RK29_CAM_POWERDNACTIVE_L
+#define CONFIG_SENSOR_POWERDNACTIVE_LEVEL_0 RK29_CAM_POWERDNACTIVE_H
 #define CONFIG_SENSOR_FLASHACTIVE_LEVEL_0 RK29_CAM_FLASHACTIVE_L
 
 #define CONFIG_SENSOR_QCIF_FPS_FIXED_0		15000
@@ -150,8 +141,8 @@
 #define CONFIG_SENSOR_SVGA_FPS_FIXED_02      15000
 #define CONFIG_SENSOR_720P_FPS_FIXED_02      30000
 
-#define CONFIG_SENSOR_1 RK29_CAM_SENSOR_GC0308                      /* front camera sensor 0 */
-#define CONFIG_SENSOR_IIC_ADDR_1 	    0x42
+#define CONFIG_SENSOR_1 RK29_CAM_SENSOR_OV2659                      /* front camera sensor 0 */
+#define CONFIG_SENSOR_IIC_ADDR_1 	    0x60
 #define CONFIG_SENSOR_IIC_ADAPTER_ID_1	  3
 #define CONFIG_SENSOR_CIF_INDEX_1				  0
 #define CONFIG_SENSOR_ORIENTATION_1       270
@@ -258,7 +249,7 @@ static void rk_cif_power(int on)
    // 	printk("%s set ldo7 vcc28_cif=%dmV end\n", __func__, regulator_get_voltage(ldo_28));
     	regulator_put(ldo_28);
 
-       regulator_set_voltage(ldo_18, 1500000, 1500000);
+    	regulator_set_voltage(ldo_18, 1800000, 1800000);
     //	regulator_set_suspend_voltage(ldo, 1800000);
     	regulator_enable(ldo_18);
     //	printk("%s set ldo1 vcc18_cif=%dmV end\n", __func__, regulator_get_voltage(ldo_18));
@@ -744,11 +735,11 @@ static struct spi_board_info board_spi_devices[] = {
 *	rk30  backlight
 ************************************************************/
 #ifdef CONFIG_BACKLIGHT_RK29_BL
-#define PWM_ID            2
-#define PWM_MUX_NAME      GPIO0D6_PWM2_NAME
-#define PWM_MUX_MODE      GPIO0D_PWM2
-#define PWM_MUX_MODE_GPIO GPIO0D_GPIO0D6
-#define PWM_GPIO 	  RK30_PIN0_PD6
+#define PWM_ID            0
+#define PWM_MUX_NAME      GPIO0A3_PWM0_NAME
+#define PWM_MUX_MODE      GPIO0A_PWM0
+#define PWM_MUX_MODE_GPIO GPIO0A_GPIO0A3
+#define PWM_GPIO 	  RK30_PIN0_PA3
 #ifdef CONFIG_MALATA_C7011
 #define PWM_EFFECT_VALUE  0
 #else
@@ -785,17 +776,7 @@ static int rk29_backlight_io_init(void)
 static int rk29_backlight_io_deinit(void)
 {
 	int ret = 0;
-
-	rk30_mux_api_set(PWM_MUX_NAME, PWM_MUX_MODE_GPIO);
-	if (gpio_request(PWM_GPIO, NULL)) {
-		printk("func %s, line %d: request gpio fail\n", __FUNCTION__, __LINE__);
-		return -1;
-	}
-	gpio_direction_output(PWM_GPIO, GPIO_LOW);
-
 #ifdef  LCD_DISP_ON_PIN
-	gpio_direction_output(BL_EN_PIN, 0);
-	gpio_set_value(BL_EN_PIN, !BL_EN_VALUE);
 	gpio_free(BL_EN_PIN);
 #endif
 	rk30_mux_api_set(PWM_MUX_NAME, PWM_MUX_MODE_GPIO);
@@ -823,7 +804,7 @@ static int rk29_backlight_pwm_resume(void)
 	gpio_free(PWM_GPIO);
 	rk30_mux_api_set(PWM_MUX_NAME, PWM_MUX_MODE);
 #ifdef  LCD_DISP_ON_PIN
-	msleep(150);
+	msleep(30);
 	gpio_direction_output(BL_EN_PIN, 1);
 	gpio_set_value(BL_EN_PIN, BL_EN_VALUE);
 #endif
@@ -877,106 +858,6 @@ static struct platform_device rk30_device_modem = {
 	}
 };
 #endif
-#if defined(CONFIG_MU509)
-static int mu509_io_init(void)
-{
-
-	rk30_mux_api_set(GPIO2B6_LCDC1DATA14_SMCADDR18_TSSYNC_NAME, GPIO2B_GPIO2B6);
-        rk30_mux_api_set(GPIO4D2_SMCDATA10_TRACEDATA10_NAME, GPIO4D_GPIO4D2);
-	rk30_mux_api_set(GPIO2B7_LCDC1DATA15_SMCADDR19_HSADCDATA7_NAME, GPIO2B_GPIO2B7);
-	rk30_mux_api_set(GPIO2C0_LCDCDATA16_GPSCLK_HSADCCLKOUT_NAME, GPIO2C_GPIO2C0);
-	return 0;
-}
-
-static int mu509_io_deinit(void)
-{
-	
-	return 0;
-}
- 
-struct rk29_mu509_data rk29_mu509_info = {
-	.io_init = mu509_io_init,
-  	.io_deinit = mu509_io_deinit,
-	.modem_power_en = RK30_PIN4_PD1,
-	.bp_power = RK30_PIN0_PB6,//RK30_PIN4_PD1,
-	.bp_reset = RK30_PIN0_PD2,
-	.ap_wakeup_bp = RK30_PIN0_PB2,
-	.bp_wakeup_ap = RK30_PIN0_PB5, 
-};
-struct platform_device rk29_device_mu509 = {	
-        .name = "mu509",	
-    	.id = -1,	
-	.dev		= {
-		.platform_data = &rk29_mu509_info,
-	}    	
-    };
-#endif
-#if defined(CONFIG_MW100)
-static int mw100_io_init(void)
-{
-	 rk30_mux_api_set(GPIO2B6_LCDC1DATA14_SMCADDR18_TSSYNC_NAME, GPIO2B_GPIO2B6);
-	 rk30_mux_api_set(GPIO4D2_SMCDATA10_TRACEDATA10_NAME, GPIO4D_GPIO4D2);
-	 rk30_mux_api_set(GPIO2B7_LCDC1DATA15_SMCADDR19_HSADCDATA7_NAME, GPIO2B_GPIO2B7);
-	 rk30_mux_api_set(GPIO2C0_LCDCDATA16_GPSCLK_HSADCCLKOUT_NAME, GPIO2C_GPIO2C0);
-	return 0;
-}
-
-static int mw100_io_deinit(void)
-{
-	
-	return 0;
-}
- 
-struct rk29_mw100_data rk29_mw100_info = {
-	.io_init = mw100_io_init,
-  	.io_deinit = mw100_io_deinit,
-	.modem_power_en = RK30_PIN6_PB2,
-	.bp_power = RK30_PIN2_PB6,
-	.bp_reset = RK30_PIN4_PD2,
-	.ap_wakeup_bp = RK30_PIN2_PB7,
-	.bp_wakeup_ap = RK30_PIN6_PA0,
-};
-struct platform_device rk29_device_mw100 = {	
-        .name = "mw100",	
-    	.id = -1,	
-	.dev		= {
-		.platform_data = &rk29_mw100_info,
-	}    	
-    };
-#endif
-#if defined(CONFIG_MT6229)
-static int mt6229_io_init(void)
-{
-	 rk30_mux_api_set(GPIO2B6_LCDC1DATA14_SMCADDR18_TSSYNC_NAME, GPIO2B_GPIO2B6);
-	 rk30_mux_api_set(GPIO4D2_SMCDATA10_TRACEDATA10_NAME, GPIO4D_GPIO4D2);
-	 rk30_mux_api_set(GPIO2B7_LCDC1DATA15_SMCADDR19_HSADCDATA7_NAME, GPIO2B_GPIO2B7);
-	 rk30_mux_api_set(GPIO2C0_LCDCDATA16_GPSCLK_HSADCCLKOUT_NAME, GPIO2C_GPIO2C0);
-	return 0;
-}
-
-static int mt6229_io_deinit(void)
-{
-	
-	return 0;
-}
- 
-struct rk29_mt6229_data rk29_mt6229_info = {
-	.io_init = mt6229_io_init,
-  	.io_deinit = mt6229_io_deinit,
-	.modem_power_en = RK30_PIN6_PB2,
-	.bp_power = RK30_PIN2_PB7,//RK30_PIN2_PB6,
-	.bp_reset = RK30_PIN4_PD2,
-	.ap_wakeup_bp = RK30_PIN2_PC0,
-	.bp_wakeup_ap = RK30_PIN6_PA0,
-};
-struct platform_device rk29_device_mt6229 = {	
-        .name = "mt6229",	
-    	.id = -1,	
-	.dev		= {
-		.platform_data = &rk29_mt6229_info,
-	}    	
-    };
-#endif
 
 /*MMA8452 gsensor*/
 #if defined (CONFIG_GS_MMA8452)
@@ -1002,7 +883,7 @@ static struct sensor_platform_data mma8452_info = {
 	.irq_enable = 1,
 	.poll_delay_ms = 30,
         .init_platform_hw = mma8452_init_platform_hw,
-        .orientation = {-1, 0, 0, 0, 0, -1, 0, -1, 0},
+        .orientation = {-1, 0, 0, 0, 0, 1, 0, -1, 0},
 };
 #endif
 #endif
@@ -1094,7 +975,7 @@ static struct sensor_platform_data l3g4200d_info = {
 	.type = SENSOR_TYPE_GYROSCOPE,
 	.irq_enable = 1,
 	.poll_delay_ms = 30,
-	.orientation = {1, 0, 0, 0, 1, 0, 0, 0, 1},
+	.orientation = {0, 1, 0, -1, 0, 0, 0, 0, 1},
 	.init_platform_hw = l3g4200d_init_platform_hw,
 	.x_min = 40,//x_min,y_min,z_min = (0-100) according to hardware
 	.y_min = 40,
@@ -1124,31 +1005,28 @@ static struct sensor_platform_data lsl29023_info = {
 #ifdef CONFIG_FB_ROCKCHIP
 
 #define LCD_CS_MUX_NAME    GPIO4C7_SMCDATA7_TRACEDATA7_NAME
-#define LCD_CS_PIN         RK30_PIN6_PB4
-#define LCD_CS_VALUE       GPIO_LOW
+#define LCD_CS_PIN         RK30_PIN4_PC7
+#define LCD_CS_VALUE       GPIO_HIGH
 
 #define LCD_EN_MUX_NAME    GPIO4C7_SMCDATA7_TRACEDATA7_NAME
-#define LCD_EN_PIN         RK30_PIN4_PC7
-#define LCD_EN_VALUE       GPIO_HIGH
+#define LCD_EN_PIN         RK30_PIN6_PB4
+#define LCD_EN_VALUE       GPIO_LOW
 
 static int rk_fb_io_init(struct rk29_fb_setting_info *fb_setting)
 {
 	int ret = 0;
+	rk30_mux_api_set(LCD_CS_MUX_NAME, GPIO4C_GPIO4C7);
 	ret = gpio_request(LCD_CS_PIN, NULL);
 	if (ret != 0)
 	{
 		gpio_free(LCD_CS_PIN);
-		printk(KERN_ERR "request lcd en pin fail!\n");
+		printk(KERN_ERR "request lcd cs pin fail!\n");
 		return -1;
 	}
 	else
 	{
-		gpio_direction_output(LCD_CS_PIN, GPIO_LOW);
-		gpio_set_value(LCD_CS_PIN, GPIO_LOW);
+		gpio_direction_output(LCD_CS_PIN, LCD_CS_VALUE);
 	}
-
-	mdelay(50);
-	rk30_mux_api_set(LCD_EN_MUX_NAME, GPIO4C_GPIO4C7);
 	ret = gpio_request(LCD_EN_PIN, NULL);
 	if (ret != 0)
 	{
@@ -1158,9 +1036,7 @@ static int rk_fb_io_init(struct rk29_fb_setting_info *fb_setting)
 	}
 	else
 	{
-		gpio_direction_output(LCD_EN_PIN, 1);
-		gpio_set_value(LCD_EN_PIN, LCD_EN_VALUE);
-		gpio_set_value(LCD_EN_PIN,  GPIO_HIGH);
+		gpio_direction_output(LCD_EN_PIN, LCD_EN_VALUE);
 	}
 	return 0;
 }
@@ -1513,30 +1389,14 @@ struct rk29_sdmmc_platform_data default_sdmmc1_data = {
 **************************************************************************************************/
 
 #ifdef CONFIG_BATTERY_RK30_ADC
-#ifdef CONFIG_BATTERY_RK30_USB_AND_CHARGE
 static struct rk30_adc_battery_platform_data rk30_adc_battery_platdata = {
-        .dc_det_pin      = RK30_PIN6_PA5, //RK30_PIN6_PA5,
-        .batt_low_pin    = RK30_PIN6_PA0, //RK30_PIN6_PA0,
-        .charge_set_pin  = INVALID_GPIO,
-        .charge_ok_pin   = RK30_PIN6_PA6,
-        .charge_type_pin  =  RK30_PIN6_PB2,
-        .dc_det_level    = GPIO_LOW,
-        .charge_ok_level = GPIO_HIGH,
-        .usb_det_pin	 = RK30_PIN6_PA5,
-        .usb_det_level   = GPIO_LOW,
-};
-#else
-static struct rk30_adc_battery_platform_data rk30_adc_battery_platdata = {
-        .dc_det_pin      = RK30_PIN6_PA5, //RK30_PIN6_PA5,
-        .batt_low_pin    = RK30_PIN6_PA0, //RK30_PIN6_PA0,
+        .dc_det_pin      = RK30_PIN6_PA5,
+        .batt_low_pin    = RK30_PIN6_PA0,
         .charge_set_pin  = INVALID_GPIO,
         .charge_ok_pin   = RK30_PIN6_PA6,
         .dc_det_level    = GPIO_LOW,
         .charge_ok_level = GPIO_HIGH,
-        .usb_det_pin	 = RK30_PIN6_PA3,
-        .usb_det_level   = GPIO_LOW,
 };
-#endif
 
 static struct platform_device rk30_device_adc_battery = {
         .name   = "rk30-battery",
@@ -1546,585 +1406,6 @@ static struct platform_device rk30_device_adc_battery = {
         },
 };
 #endif
-
-#if defined (CONFIG_TPS65910_RK30)
-/* VDD1 */
-static struct regulator_consumer_supply rk29_vdd1_supplies[] = {
-	{
-		.supply = "vdd_cpu",	//	set name vcore for all platform
-	},
-};
-
-/* VDD1 DCDC */
-static struct regulator_init_data rk29_regulator_vdd1 = {
-	.constraints = {
-		.min_uV = 950000,
-		.max_uV = 1450000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE,
-		.always_on = true,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vdd1_supplies),
-	.consumer_supplies = rk29_vdd1_supplies,
-};
-
-/* VDD2 */
-static struct regulator_consumer_supply rk29_vdd2_supplies[] = {
-	{
-		.supply = "vdd2",
-	},
-};
-
-/* VDD2 DCDC */
-static struct regulator_init_data rk29_regulator_vdd2 = {
-	.constraints = {
-		.min_uV = 1500000,
-		.max_uV = 1500000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.always_on = true,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vdd2_supplies),
-	.consumer_supplies = rk29_vdd2_supplies,
-};
-
-/* logic fake */
-
-static struct regulator_consumer_supply rk29_logic_supplies[] = {
-	{
-		.supply = "vdd_core",
-	},
-};
-
-/* VDD3 DCDC */
-static struct regulator_init_data rk29_fake_logic = {
-	.constraints = {
-		.min_uV = 1000000,
-		.max_uV = 1400000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS | REGULATOR_CHANGE_VOLTAGE,
-		.always_on = true,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_logic_supplies),
-	.consumer_supplies = rk29_logic_supplies,
-};
-
-/* VIO */
-static struct regulator_consumer_supply rk29_vio_supplies[] = {
-	{
-		.supply = "vio",
-	},
-};
-
-/* VIO  LDO */
-static struct regulator_init_data rk29_regulator_vio = {
-	.constraints = {
-		.min_uV = 3300000,
-		.max_uV = 3300000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.always_on = true,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vio_supplies),
-	.consumer_supplies = rk29_vio_supplies,
-};
-
-/* VAUX1 */
-static struct regulator_consumer_supply rk29_vaux1_supplies[] = {
-	{
-		.supply = "vaux1",
-	},
-};
-
-/* VAUX1  LDO */
-static struct regulator_init_data rk29_regulator_vaux1 = {
-	.constraints = {
-		.min_uV = 2500000,
-		.max_uV = 2500000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vaux1_supplies),
-	.consumer_supplies = rk29_vaux1_supplies,
-};
-
-/* VAUX2 */
-static struct regulator_consumer_supply rk29_vaux2_supplies[] = {
-	{
-		.supply = "vaux2",
-	},
-};
-
-/* VAUX2  LDO */
-static struct regulator_init_data rk29_regulator_vaux2 = {
-	.constraints = {
-		.min_uV = 3300000,
-		.max_uV = 3300000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vaux2_supplies),
-	.consumer_supplies = rk29_vaux2_supplies,
-};
-
-/* VDAC */
-static struct regulator_consumer_supply rk29_vdac_supplies[] = {
-	{
-		.supply = "ldo1",
-	},
-};
-
-/* VDAC  LDO */
-static struct regulator_init_data rk29_regulator_vdac = {
-	.constraints = {
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS  | REGULATOR_CHANGE_VOLTAGE,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vdac_supplies),
-	.consumer_supplies = rk29_vdac_supplies,
-};
-
-/* VAUX33 */
-static struct regulator_consumer_supply rk29_vaux33_supplies[] = {
-	{
-		.supply = "vaux33",
-	},
-};
-
-/* VAUX33  LDO */
-static struct regulator_init_data rk29_regulator_vaux33 = {
-	.constraints = {
-		.min_uV = 3300000,
-		.max_uV = 3300000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vaux33_supplies),
-	.consumer_supplies = rk29_vaux33_supplies,
-};
-
-/* VMMC */
-static struct regulator_consumer_supply rk29_vmmc_supplies[] = {
-	{
-		.supply = "ldo7",
-	},
-};
-
-/* VMMC  LDO */
-static struct regulator_init_data rk29_regulator_vmmc = {
-	.constraints = {
-		.min_uV = 2800000,
-		.max_uV = 2800000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS  | REGULATOR_CHANGE_VOLTAGE,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vmmc_supplies),
-	.consumer_supplies = rk29_vmmc_supplies,
-};
-
-/* VPLL */
-static struct regulator_consumer_supply rk29_vpll_supplies[] = {
-	{
-		.supply = "vpll",
-	},
-};
-
-/* VPLL  LDO */
-static struct regulator_init_data rk29_regulator_vpll = {
-	.constraints = {
-		.min_uV = 1100000,
-		.max_uV = 1100000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.always_on = true,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vpll_supplies),
-	.consumer_supplies = rk29_vpll_supplies,
-};
-
-/* VDIG1 */
-static struct regulator_consumer_supply rk29_vdig1_supplies[] = {
-	{
-		.supply = "vdig1",
-	},
-};
-
-/* VDIG1  LDO */
-static struct regulator_init_data rk29_regulator_vdig1 = {
-	.constraints = {
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vdig1_supplies),
-	.consumer_supplies = rk29_vdig1_supplies,
-};
-
-/* VDIG2 */
-static struct regulator_consumer_supply rk29_vdig2_supplies[] = {
-	{
-		.supply = "vdig2",
-	},
-};
-
-/* VDIG2  LDO */
-static struct regulator_init_data rk29_regulator_vdig2 = {
-	.constraints = {
-		.min_uV = 1100000,
-		.max_uV = 1100000,
-		.valid_modes_mask = REGULATOR_MODE_NORMAL,
-		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-		.apply_uV = true,
-	},
-	.num_consumer_supplies = ARRAY_SIZE(rk29_vdig2_supplies),
-	.consumer_supplies = rk29_vdig2_supplies,
-};
-
-static int rk29_tps65910_config(struct tps65910_platform_data *pdata)
-{
-	u8 val 	= 0;
-	int i 	= 0;
-	int err = -1;
-
-
-	/* Configure TPS65910 for rk29 board needs */
-	printk("rk29_tps65910_config: tps65910 init config.\n");
-
-	err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_DEVCTRL2);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910_REG_DEVCTRL2 reg\n");
-		return -EIO;
-	}
-	/* Set sleep state active high and allow device turn-off after PWRON long press */
-	val |= (TPS65910_DEV2_SLEEPSIG_POL | TPS65910_DEV2_PWON_LP_OFF);
-
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val,
-			TPS65910_REG_DEVCTRL2);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_DEVCTRL2 reg\n");
-		return -EIO;
-	}
-
-#if 1
-	/* set PSKIP=0 */
-        err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_DCDCCTRL);
-        if (err) {
-                printk(KERN_ERR "Unable to read TPS65910_REG_DCDCCTRL reg\n");
-                return -EIO;
-        }
-	//val &= ~(1 << 4);
-		val &= 0xFC;
-	//	val |= 0x03;
-
-        err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val,
-                        TPS65910_REG_DCDCCTRL);
-        if (err) {
-                printk(KERN_ERR "Unable to write TPS65910_REG_DCDCCTRL reg\n");
-                return -EIO;
-        }
-#endif
-	/* Set the maxinum load current */
-	/* VDD1 */
-	err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_VDD1);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910_REG_VDD1 reg\n");
-		return -EIO;
-	}
-
-	val |= (1<<5);
-	val |= (0x07<<2);
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_VDD1);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VDD1 reg\n");
-		return -EIO;
-	}
-
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0xB5, TPS65910_REG_VDD1_OP);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VDD1 volt reg\n");
-		return -EIO;
-	}
-	/* VDD2 */
-	err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_VDD2);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910_REG_VDD2 reg\n");
-		return -EIO;
-	}
-
-	val |= (1<<5);
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_VDD2);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VDD2 reg\n");
-		return -EIO;
-	}
-
-	/* VIO */
-	err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_VIO);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910_REG_VIO reg\n");
-		return -EIO;
-	}
-
-	val |= (1<<6);
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_VIO);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VIO reg\n");
-		return -EIO;
-	}
-//设置各路电压
-//VDIG1  1.8v
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x09, TPS65910_REG_VDIG1);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VDIG1 reg\n");
-		return -EIO;
-	}
-
-//VDIG2  1.1V
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x05, TPS65910_REG_VDIG2);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VDIG2 reg\n");
-		return -EIO;
-	}
-
-//VAUX1  2.5
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x05, TPS65910_REG_VAUX1);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VAUX1 reg\n");
-		return -EIO;
-	}
-
-//VAUX2  3.3
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x0D, TPS65910_REG_VAUX2);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VAUX2 reg\n");
-		return -EIO;
-	}
-
-//VAUX33  3.3
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x0D, TPS65910_REG_VAUX33);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VAUX33 reg\n");
-		return -EIO;
-	}
-
-//VPLL  2.5
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x0d, TPS65910_REG_VPLL);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VPLL reg\n");
-		return -EIO;
-	}
-
-//VDAC  1.8
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x01, TPS65910_REG_VDAC);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VDAC reg\n");
-		return -EIO;
-	}
-
-//VMMC 2.8
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x05, TPS65910_REG_VMMC);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_VMMC reg\n");
-		return -EIO;
-	}
-
-	/* Mask ALL interrupts */
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0xFF,
-			TPS65910_REG_INT_MSK);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_INT_MSK reg\n");
-		return -EIO;
-	}
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, 0x03,
-			TPS65910_REG_INT_MSK2);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_INT_MSK2 reg\n");
-		return -EIO;
-	}
-
-	/* Set RTC Power, disable Smart Reflex in DEVCTRL_REG */
-	val = 0;
-	val |= (TPS65910_SR_CTL_I2C_SEL);
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val,
-			TPS65910_REG_DEVCTRL);
-	if (err) {
-		printk(KERN_ERR "Unable to write TPS65910_REG_DEVCTRL reg\n");
-		return -EIO;
-	}
-
-	printk(KERN_INFO "TPS65910 Set default voltage.\n");
-#if 1
-//read sleep control register  for debug
-	for(i=0; i<6; i++)
-	{
-		err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_DEVCTRL+i);
-		if (err) {
-			printk(KERN_ERR "Unable to read TPS65910_REG_DCDCCTRL reg\n");
-			return -EIO;
-		}else
-			printk("%s reg 0x%x is  0x%04x\n",__FUNCTION__, TPS65910_REG_DEVCTRL+i, val);
-	}
-#endif
-
-#if 1
-//sleep control register
-        err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_DEVCTRL);
-        if (err) {
-                printk(KERN_ERR "Unable to read TPS65910_REG_DCDCCTRL reg\n");
-                return -EIO;
-        }
-		val |= (1 << 1);
-		err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_DEVCTRL);
-		if (err) {
-			printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-					\n", TPS65910_REG_VDIG1);
-			return -EIO;
-		}
-
-        err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_SLEEP_KEEP_LDO_ON);
-        if (err) {
-                printk(KERN_ERR "Unable to read TPS65910_REG_DCDCCTRL reg\n");
-                return -EIO;
-        }
-		val &= 0;
-		err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_SLEEP_KEEP_LDO_ON);
-		if (err) {
-			printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-					\n", TPS65910_REG_VDIG1);
-			return -EIO;
-		}
-
-        err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_SLEEP_KEEP_RES_ON);
-        if (err) {
-                printk(KERN_ERR "Unable to read TPS65910_REG_DCDCCTRL reg\n");
-                return -EIO;
-        }
-		val  |= 0xff;
-		err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_SLEEP_KEEP_RES_ON);
-		if (err) {
-			printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-					\n", TPS65910_REG_VDIG1);
-			return -EIO;
-		}
-
-        err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_SLEEP_SET_LDO_OFF);
-        if (err) {
-                printk(KERN_ERR "Unable to read TPS65910_REG_DCDCCTRL reg\n");
-                return -EIO;
-        }
-
-		val |= 0x9B;
-		err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_SLEEP_SET_LDO_OFF);
-		if (err) {
-			printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-					\n", TPS65910_REG_VDIG1);
-			return -EIO;
-		}
-
-#if 1
-//read sleep control register  for debug
-	for(i=0; i<6; i++)
-	{
-		err = tps65910_i2c_read_u8(TPS65910_I2C_ID0, &val, TPS65910_REG_DEVCTRL+i);
-		if (err) {
-			printk(KERN_ERR "Unable to read TPS65910_REG_DCDCCTRL reg\n");
-			return -EIO;
-		}else
-			printk("%s reg 0x%x is  0x%04x\n",__FUNCTION__, TPS65910_REG_DEVCTRL+i, val);
-	}
-#endif
-
-#endif
-#if 0
-	/* VDIG1 Set the default voltage from 1800mV to 2700 mV for camera io */
-	val = 0x01;
-	val |= (0x03 << 2);
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_VDIG1);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-				\n", TPS65910_REG_VDIG1);
-		return -EIO;
-	}
-#endif
-
-#if 0
-	/* VDD1 whitch suplies for core Set the default voltage: 1150 mV(47)*/
-	val = 47;
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_VDD1_OP);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-				\n", TPS65910_REG_VDD1_OP);
-		return -EIO;
-	}
-#endif
-
-#if 0
-	/* VDD2 whitch suplies for ddr3 Set the default voltage: 1087 * 1.25mV(41)*/
-	val = 42;
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_VDD2_OP);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-				\n", TPS65910_REG_VDD2_OP);
-		return -EIO;
-	}
-#endif
-
-#if 0
-	/* VAUX2 whitch suplies for LCD Set the default voltage: 1290mV*/
-	val = 0x09;
-	err = tps65910_i2c_write_u8(TPS65910_I2C_ID0, val, TPS65910_REG_VAUX2);
-	if (err) {
-		printk(KERN_ERR "Unable to read TPS65910 Reg at offset 0x%x= \
-				\n", TPS65910_REG_VAUX2);
-		return -EIO;
-	}
-#endif
-	/* initilize all ISR work as NULL, specific driver will
-	 * assign function(s) later.
-	 */
-	for (i = 0; i < TPS65910_MAX_IRQS; i++)
-		pdata->handlers[i] = NULL;
-
-	return 0;
-}
-
-struct tps65910_platform_data rk29_tps65910_data = {
-	.irq_num 		= (unsigned)TPS65910_HOST_IRQ,
-	.gpio  		= NULL,
-	.vio   		= &rk29_regulator_vio,
-	.vdd1  		= &rk29_regulator_vdd1,
-	.vdd2  		= &rk29_regulator_vdd2,
-	.vdd3  		= &rk29_fake_logic,
-	.vdig1		= &rk29_regulator_vdig1,
-	.vdig2		= &rk29_regulator_vdig2,
-	.vaux33		= &rk29_regulator_vaux33,
-	.vmmc		= &rk29_regulator_vmmc,
-	.vaux1		= &rk29_regulator_vaux1,
-	.vaux2		= &rk29_regulator_vaux2,
-	.vdac		= &rk29_regulator_vdac,
-	.vpll			= &rk29_regulator_vpll,
-	.board_tps65910_config = rk29_tps65910_config,
-};
-#endif /* CONFIG_TPS65910_CORE */
-
-struct platform_device charge_lowerpower_device = {
-    .name   = "charge_lowerpower",
-	.id = -1,
-};
 
 #ifdef CONFIG_RK29_VMAC
 #define PHY_PWR_EN_GPIO	RK30_PIN1_PD6
@@ -2218,22 +1499,12 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_RK29_SUPPORT_MODEM
 	&rk30_device_modem,
 #endif
-#if defined(CONFIG_MU509)
-	&rk29_device_mu509,
-#endif
-#if defined(CONFIG_MW100)
-	&rk29_device_mw100,
-#endif
-#if defined(CONFIG_MT6229)
-	&rk29_device_mt6229,
-#endif
 #ifdef CONFIG_BATTERY_RK30_ADC
  	&rk30_device_adc_battery,
 #endif
 #ifdef CONFIG_RFKILL_RK
 	&device_rfkill_rk,
 #endif
-	&charge_lowerpower_device,
 };
 
 // i2c
@@ -2338,10 +1609,7 @@ static struct i2c_board_info __initdata i2c0_info[] = {
 #endif
 
 #ifdef CONFIG_I2C1_RK30
-int  board_wm831x = 0;
-#ifdef CONFIG_MFD_WM831X_I2C
 #include "board-rk30-sdk-wm8326.c"
-#endif
 
 static struct i2c_board_info __initdata i2c1_info[] = {
 #if defined (CONFIG_MFD_WM831X_I2C)
@@ -2351,15 +1619,6 @@ static struct i2c_board_info __initdata i2c1_info[] = {
 		.flags         = 0,
 		.irq           = RK30_PIN6_PA4,
 		.platform_data = &wm831x_platdata,
-	},
-#endif
-#if defined (CONFIG_TPS65910_RK30)
-	{
-		.type           = "tps659102",
-		.addr           = TPS65910_I2C_ID0,
-		.flags          = 0,
-		.irq            = TPS65910_HOST_IRQ,
-		.platform_data  = &rk29_tps65910_data,
 	},
 #endif
 };
@@ -2483,29 +1742,21 @@ static void __init rk30_i2c_register_board_info(void)
 #endif
 }
 //end of i2c
-#ifdef CONFIG_TPS65910_RK30
-extern int tps65910_shutdown();
-#endif
+
 #define POWER_ON_PIN RK30_PIN6_PB0   //power_hold
 static void rk30_pm_power_off(void)
 {
 	printk(KERN_ERR "rk30_pm_power_off start...\n");
 	gpio_direction_output(POWER_ON_PIN, GPIO_LOW);
-	if (board_wm831x == 1)
-	{
-		wm831x_set_bits(Wm831x,WM831X_GPIO_LEVEL,0x0001,0x0000);  //set sys_pwr 0
-		wm831x_device_shutdown(Wm831x);//wm8326 shutdown
-	}
-#ifdef CONFIG_TPS65910_RK30
-	else
-		tps65910_shutdown();
+#if defined(CONFIG_MFD_WM831X)
+	wm831x_set_bits(Wm831x,WM831X_GPIO_LEVEL,0x0001,0x0000);  //set sys_pwr 0
+	wm831x_device_shutdown(Wm831x);//wm8326 shutdown
 #endif
 	while (1);
 }
 
 static void __init machine_rk30_board_init(void)
 {
-	avs_init();
 	gpio_request(POWER_ON_PIN, "poweronpin");
 	gpio_direction_output(POWER_ON_PIN, GPIO_HIGH);
 	
@@ -2514,7 +1765,7 @@ static void __init machine_rk30_board_init(void)
 	rk30_i2c_register_board_info();
 	spi_register_board_info(board_spi_devices, ARRAY_SIZE(board_spi_devices));
 	platform_add_devices(devices, ARRAY_SIZE(devices));
-//	board_usb_detect_init(RK30_PIN6_PA3);
+	board_usb_detect_init(RK30_PIN6_PA3);
 
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	rk29sdk_wifi_bt_gpio_control_init();
@@ -2547,23 +1798,26 @@ static void __init rk30_reserve(void)
  * @logic_volt	: logic voltage arm requests depend on frequency
  * comments	: min arm/logic voltage
  */
- #if  0
 static struct dvfs_arm_table dvfs_cpu_logic_table[] = {
 	{.frequency = 252 * 1000,	.cpu_volt = 1075 * 1000,	.logic_volt = 1125 * 1000},//0.975V/1.000V
-	{.frequency = 504 * 1000,	.cpu_volt = 1075 * 1000,	.logic_volt = 1125 * 1000},//0.975V/1.000V
-	{.frequency = 816 * 1000,	.cpu_volt = 1100 * 1000,	.logic_volt = 1150 * 1000},//1.000V/1.025V
+	{.frequency = 504 * 1000,	.cpu_volt = 1100 * 1000,	.logic_volt = 1125 * 1000},//0.975V/1.000V
+	{.frequency = 816 * 1000,	.cpu_volt = 1125 * 1000,	.logic_volt = 1150 * 1000},//1.000V/1.025V
 	{.frequency = 1008 * 1000,	.cpu_volt = 1125 * 1000,	.logic_volt = 1150 * 1000},//1.025V/1.050V
 	{.frequency = 1200 * 1000,	.cpu_volt = 1175 * 1000,	.logic_volt = 1200 * 1000},//1.100V/1.050V
 	{.frequency = 1272 * 1000,	.cpu_volt = 1225 * 1000,	.logic_volt = 1200 * 1000},//1.150V/1.100V
 	{.frequency = 1416 * 1000,	.cpu_volt = 1300 * 1000,	.logic_volt = 1200 * 1000},//1.225V/1.100V
-	//{.frequency = 1512 * 1000,	.cpu_volt = 1350 * 1000,	.logic_volt = 1250 * 1000},//1.300V/1.150V
-	//{.frequency = 1608 * 1000,	.cpu_volt = 1375 * 1000,	.logic_volt = 1300 * 1000},//1.325V/1.175V
+	{.frequency = 1512 * 1000,	.cpu_volt = 1350 * 1000,	.logic_volt = 1250 * 1000},//1.300V/1.150V
+  /* 
+    // Omegamoon >> Try experimenting with lower voltage here
+    {.frequency = 1608 * 1000,	.cpu_volt = 1375 * 1000,	.logic_volt = 1300 * 1000},//1.325V/1.175V
+  */	
+	{.frequency = 1608 * 1000,	.cpu_volt = 1425 * 1000,	.logic_volt = 1300 * 1000},//1.325V/1.175V
 	{.frequency = CPUFREQ_TABLE_END},
 };
 
 static struct cpufreq_frequency_table dvfs_gpu_table[] = {
 	{.frequency = 266 * 1000,	.index = 1050 * 1000},
-	//{.frequency = 400 * 1000,	.index = 1275 * 1000},
+	{.frequency = 400 * 1000,	.index = 1275 * 1000},
 	{.frequency = CPUFREQ_TABLE_END},
 };
 
@@ -2572,38 +1826,6 @@ static struct cpufreq_frequency_table dvfs_ddr_table[] = {
 	{.frequency = 400 * 1000,	.index = 1125 * 1000},
 	{.frequency = CPUFREQ_TABLE_END},
 };
-#else
-static struct dvfs_arm_table dvfs_cpu_logic_table[] = {
-{.frequency = 252 * 1000, .cpu_volt = 1100 * 1000, .logic_volt = 1125 * 1000},//0.975V/1.000V
-{.frequency = 504 * 1000, .cpu_volt = 1100 * 1000, .logic_volt = 1125* 1000},//0.975V/1.000V
-{.frequency = 816 * 1000, .cpu_volt = 1125 * 1000, .logic_volt = 1150 * 1000},//1.000V/1.025V
-{.frequency = 1008 * 1000, .cpu_volt = 1150 * 1000, .logic_volt = 1150 * 1000},//1.025V/1.050V
-{.frequency = 1200 * 1000, .cpu_volt = 1200 * 1000, .logic_volt = 1200 * 1000},//1.100V/1.050V
-{.frequency = 1272 * 1000, .cpu_volt = 1250 * 1000, .logic_volt = 1200 * 1000},//1.150V/1.100V
-{.frequency = 1416 * 1000, .cpu_volt = 1325 * 1000, .logic_volt = 1200 * 1000},//1.225V/1.100V
-{.frequency = 1512 * 1000, .cpu_volt = 1400 * 1000, .logic_volt = 1250 * 1000},//1.300V/1.150V
-//{.frequency = 1608 * 1000, .cpu_volt = 1425 * 1000, .logic_volt = 1300 * 1000},//1.325V/1.175V
-{.frequency = CPUFREQ_TABLE_END},
-};
-#ifdef CONFIG_GPU_SUPPORT_400M
-static struct cpufreq_frequency_table dvfs_gpu_table[] = {
-{.frequency = 266 * 1000, .index = 1050 * 1000},
-{.frequency = 400 * 1000, .index = 1275 * 1000},
-{.frequency = CPUFREQ_TABLE_END},
-};
-#else
-static struct cpufreq_frequency_table dvfs_gpu_table[] = {
-{.frequency = 266 * 1000, .index = 1050 * 1000},
-{.frequency = CPUFREQ_TABLE_END},
-};
-#endif
-
-static struct cpufreq_frequency_table dvfs_ddr_table[] = {
-{.frequency = 300 * 1000, .index = 1050 * 1000},
-{.frequency = 400 * 1000, .index = 1125 * 1000},
-{.frequency = CPUFREQ_TABLE_END},
-};
-#endif
 
 #define DVFS_CPU_TABLE_SIZE	(ARRAY_SIZE(dvfs_cpu_logic_table))
 static struct cpufreq_frequency_table cpu_dvfs_table[DVFS_CPU_TABLE_SIZE];

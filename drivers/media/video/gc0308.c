@@ -61,11 +61,11 @@ module_param(debug, int, S_IRUGO|S_IWUSR);
 #define CONFIG_SENSOR_Contrast      0
 #define CONFIG_SENSOR_Saturation    0
 #define CONFIG_SENSOR_Effect        1
-#define CONFIG_SENSOR_Scene         0
+#define CONFIG_SENSOR_Scene         1
 #define CONFIG_SENSOR_DigitalZoom   0
 #define CONFIG_SENSOR_Focus         0
-#define CONFIG_SENSOR_Exposure      1
-#define CONFIG_SENSOR_Flash         0
+#define CONFIG_SENSOR_Exposure      0
+#define CONFIG_SENSOR_Flash         1
 #define CONFIG_SENSOR_Mirror        0
 #define CONFIG_SENSOR_Flip          0
 
@@ -116,37 +116,38 @@ static struct  flash_timer flash_off_timer;
 /* init 640X480 VGA */
 static struct reginfo sensor_init_data[] =
 {
-	{0xfe , 0x80},
+
+    {0xfe , 0x80},  	
+		
 	{0xfe , 0x00},   // set page0
 	
 	{0xd2 , 0x10},   // close AEC
 	{0x22 , 0x55},   // close AWB
 
-	{0x03 , 0x01},
-	{0x04 , 0x2c},
+	{0x03 , 0x01},                                  
+	{0x04 , 0x2c},                                  
 	{0x5a , 0x56},
 	{0x5b , 0x40},
 	{0x5c , 0x4a},			
 
 	{0x22 , 0x57},   // Open AWB
 
-	{0x01 , 0xfa},
-	{0x02 , 0x70},
-	{0x0f , 0x01},
+	{0x01 , 0xfa},                                    
+	{0x02 , 0x70},                                  
+	{0x0f , 0x01},                                  
                                                                    
-        {0x28 , 0x11},   // Open AWB
-                                                            
+                                                                   
 	{0xe2 , 0x00},   //anti-flicker step [11:8]     
-	{0xe3 , 0x32},   //anti-flicker step [7:0]      
+	{0xe3 , 0x64},   //anti-flicker step [7:0]      
 		                                                               
-	{0xe4 , 0x03},   //exp level 1  16.67fps        
-	{0xe5 , 0x84},                                  
+	{0xe4 , 0x02},   //exp level 1  16.67fps        
+	{0xe5 , 0x58},                                  
 	{0xe6 , 0x03},   //exp level 2  12.5fps         
-	{0xe7 , 0x84},                                  
-	{0xe8 , 0x03},   //exp level 3  8.33fps         
-	{0xe9 , 0x84},                                  
+	{0xe7 , 0x20},                                  
+	{0xe8 , 0x04},   //exp level 3  8.33fps         
+	{0xe9 , 0xb0},                                  
 	{0xea , 0x09},   //exp level 4  4.00fps         
-	{0xeb , 0x60},                                  
+	{0xeb , 0xc4},                                  
 
 	//{0xec , 0x20},
 	   
@@ -234,7 +235,7 @@ static struct reginfo sensor_init_data[] =
 	{0x74 , 0x02},                                  
 	{0x75 , 0x3f},                                  
 	{0x76 , 0x02},                                  
-	{0x77 , 0x43},                                  
+	{0x77 , 0x36},                                  
 	{0x78 , 0x88},                                  
 	{0x79 , 0x81},                                  
 	{0x7a , 0x81},                                  
@@ -318,7 +319,7 @@ static struct reginfo sensor_init_data[] =
 	{0x11 , 0x3f},                                  
 	{0x12 , 0x72},                                  
 	{0x13 , 0x13},                                  
-	{0x14 , 0x42},
+	{0x14 , 0x42},                                  
 	{0x15 , 0x43},                                  
 	{0x16 , 0xc2},                                  
 	{0x17 , 0xa8},                                  
@@ -414,7 +415,7 @@ static struct reginfo sensor_init_data[] =
 	{0x11 , 0x37},                                  
 	{0x12 , 0x22},                                  
 	{0x13 , 0x19},                                  
-	{0x14 , 0x44},
+	{0x14 , 0x44},                                  
 	{0x15 , 0x44},  
 	
 	{0x19 , 0x50},                                  
@@ -552,7 +553,8 @@ static struct reginfo sensor_init_data[] =
 
 
 	//-------------H_V_Switch(4)---------------//
-            {0x14 , 0x10},  //0x10
+			{0x14 , 0x12},  //0x10
+
 	 /*GC0308_H_V_Switch,
 
 		1:  // normal
@@ -586,6 +588,12 @@ static struct reginfo sensor_svga[] =
 /* 640X480 VGA */
 static struct reginfo sensor_vga[] =
 {
+    {0x17, 0x13},
+    {0x18, 0x01},
+    {0x32, 0xbf},
+    {0x19, 0x03},
+    {0x1a, 0x7b},
+    {0x03, 0x0a},
 	{0x00,0x00}
 };
 
@@ -728,7 +736,7 @@ static  struct reginfo sensor_Effect_Normal[] =
 	{0x20,0x7f}, 
 	{0xd2,0x90}, 
 	{0x73,0x00}, 
-	{0x77,0x43},
+	{0x77,0x38},
 	{0xb3,0x40}, 
 	{0xb4,0x80}, 
 	{0xba,0x00}, 
@@ -815,56 +823,42 @@ static struct reginfo *sensor_EffectSeqe[] = {sensor_Effect_Normal, sensor_Effec
 static  struct reginfo sensor_Exposure0[]=
 {
 	{0xd3, 0x30},
-		    {0xb5, 0xd0},
-
     {0x00, 0x00}
 };
 
 static  struct reginfo sensor_Exposure1[]=
 {
 	{0xd3, 0x38},
-		    {0xb5, 0xe0},
-
     {0x00, 0x00}
 };
 
 static  struct reginfo sensor_Exposure2[]=
 {
-	{0xd3, 0x3c},
-		    {0xb5, 0xf0},
-
+	{0xd3, 0x40},
     {0x00, 0x00}
 };
 
 static  struct reginfo sensor_Exposure3[]=
 {
-	{0xd3, 0x40},
-	    {0xb5, 0x00},
-	
+	{0xd3, 0x48},
     {0x00, 0x00}
 };
 
 static  struct reginfo sensor_Exposure4[]=
 {
 	{0xd3, 0x50},
-		    {0xb5, 0x10},
-
     {0x00, 0x00}
 };
 
 static  struct reginfo sensor_Exposure5[]=
 {
 	{0xd3, 0x58},
-		    {0xb5, 0x20},
-
     {0x00, 0x00}
 };
 
 static  struct reginfo sensor_Exposure6[]=
 {
 	{0xd3, 0x60},
-		    {0xb5, 0x30},
-
     {0x00, 0x00}
 };
 
@@ -1873,24 +1867,24 @@ static int sensor_s_fmt(struct v4l2_subdev *sd, struct v4l2_mbus_framefmt *mf)
         sensor->info_priv.winseqe_cur_addr  = (int)winseqe_set_addr;
 
 		if (sensor_fmt_capturechk(sd,mf) == true) {				    /* ddl@rock-chips.com : Capture */
-		//	qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_EFFECT);
-		//	sensor_set_effect(icd, qctrl,sensor->info_priv.effect);
-			//if (sensor->info_priv.whiteBalance != 0) {
-			//	qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_DO_WHITE_BALANCE);
-			//	sensor_set_whiteBalance(icd, qctrl,sensor->info_priv.whiteBalance);
-			//}
+			qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_EFFECT);
+			sensor_set_effect(icd, qctrl,sensor->info_priv.effect);
+			if (sensor->info_priv.whiteBalance != 0) {
+				qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_DO_WHITE_BALANCE);
+				sensor_set_whiteBalance(icd, qctrl,sensor->info_priv.whiteBalance);
+			}
 			sensor->info_priv.snap2preview = true;
 		} else if (sensor_fmt_videochk(sd,mf) == true) {			/* ddl@rock-chips.com : Video */
-		//	qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_EFFECT);
-		//	sensor_set_effect(icd, qctrl,sensor->info_priv.effect);
-			//qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_DO_WHITE_BALANCE);
-			//sensor_set_whiteBalance(icd, qctrl,sensor->info_priv.whiteBalance);
+			qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_EFFECT);
+			sensor_set_effect(icd, qctrl,sensor->info_priv.effect);
+			qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_DO_WHITE_BALANCE);
+			sensor_set_whiteBalance(icd, qctrl,sensor->info_priv.whiteBalance);
 			sensor->info_priv.video2preview = true;
 		} else if ((sensor->info_priv.snap2preview == true) || (sensor->info_priv.video2preview == true)) {
-		//	qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_EFFECT);
-		//	sensor_set_effect(icd, qctrl,sensor->info_priv.effect);
-			//qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_DO_WHITE_BALANCE);
-			//sensor_set_whiteBalance(icd, qctrl,sensor->info_priv.whiteBalance);
+			qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_EFFECT);
+			sensor_set_effect(icd, qctrl,sensor->info_priv.effect);
+			qctrl = soc_camera_find_qctrl(&sensor_ops, V4L2_CID_DO_WHITE_BALANCE);
+			sensor_set_whiteBalance(icd, qctrl,sensor->info_priv.whiteBalance);
             msleep(600);
 			sensor->info_priv.video2preview = false;
 			sensor->info_priv.snap2preview = false;
@@ -2723,9 +2717,9 @@ static long sensor_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
     struct soc_camera_device *icd = client->dev.platform_data;
     struct sensor *sensor = to_sensor(client);
     int ret = 0;
-//#if CONFIG_SENSOR_Flash	
+#if CONFIG_SENSOR_Flash	
     int i;
-//#endif
+#endif
     
 	SENSOR_DG("\n%s..%s..cmd:%x \n",SENSOR_NAME_STRING(),__FUNCTION__,cmd);
 	switch (cmd)

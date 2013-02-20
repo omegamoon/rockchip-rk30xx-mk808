@@ -24,7 +24,7 @@ struct hdmi *hdmi = NULL;
 extern irqreturn_t hdmi_irq(int irq, void *priv);
 extern void hdmi_work(struct work_struct *work);
 extern struct rk_lcdc_device_driver * rk_get_lcdc_drv(char *name);
-extern void hdmi_register_display_sysfs(struct hdmi *hdmi, struct device *parent);
+extern struct rk_display_device* hdmi_register_display_sysfs(struct hdmi *hdmi, struct device *parent);
 extern void hdmi_unregister_display_sysfs(struct hdmi *hdmi);
 
 int rk30_hdmi_register_hdcp_callbacks(void (*hdcp_cb)(void),
@@ -47,6 +47,10 @@ int rk30_hdmi_register_hdcp_callbacks(void (*hdcp_cb)(void),
 static void hdmi_early_suspend(struct early_suspend *h)
 {
 	hdmi_dbg(hdmi->dev, "hdmi enter early suspend pwr %d state %d\n", hdmi->pwr_mode, hdmi->state);
+	// When HDMI 1.1V and 2.5V power off, DDC channel will be pull down, current is produced
+	// from VCC_IO which is pull up outside soc. We need to switch DDC IO to GPIO.
+	rk30_mux_api_set(GPIO0A2_HDMII2CSDA_NAME, GPIO0A_GPIO0A2);
+	rk30_mux_api_set(GPIO0A1_HDMII2CSCL_NAME, GPIO0A_GPIO0A1);
 	flush_delayed_work(&hdmi->delay_work);	
 	mutex_lock(&hdmi->enable_mutex);
 	hdmi->suspend = 1;
@@ -63,12 +67,6 @@ static void hdmi_early_suspend(struct early_suspend *h)
 	wait_for_completion_interruptible_timeout(&hdmi->complete,
 							msecs_to_jiffies(5000));
 	flush_delayed_work(&hdmi->delay_work);
-	// When HDMI 1.1V and 2.5V power off, DDC channel will be pull down, current is produced
-	// from VCC_IO which is pull up outside soc. We need to switch DDC IO to GPIO.
-	rk30_mux_api_set(GPIO0A2_HDMII2CSDA_NAME, GPIO0A_GPIO0A2);
-	rk30_mux_api_set(GPIO0A1_HDMII2CSCL_NAME, GPIO0A_GPIO0A1);
-
-	gpio_direction_output(RK30_PIN3_PA6, 0);
 	return;
 }
 
@@ -77,11 +75,10 @@ static void hdmi_early_resume(struct early_suspend *h)
 	hdmi_dbg(hdmi->dev, "hdmi exit early resume\n");
 	mutex_lock(&hdmi->enable_mutex);
 	
-	gpio_direction_output(RK30_PIN3_PA6, 1);
-	
 	rk30_mux_api_set(GPIO0A2_HDMII2CSDA_NAME, GPIO0A_HDMI_I2C_SDA);
 	rk30_mux_api_set(GPIO0A1_HDMII2CSCL_NAME, GPIO0A_HDMI_I2C_SCL);
 	
+	clk_enable(hdmi->hclk);
 	hdmi->suspend = 0;
 	rk30_hdmi_initial();
 	if(hdmi->enable) {
@@ -111,10 +108,6 @@ static int __devinit rk30_hdmi_probe (struct platform_device *pdev)
 	int ret;
 	struct resource *res;
 	struct resource *mem;
-
-	ret = gpio_request(RK30_PIN3_PA6, "hdmi v1.1 enable");
-	if(ret < 0)
-		dev_err(hdmi->dev, "hdmi request GPIO failed (%d).\n", ret);
 	
 	hdmi = kmalloc(sizeof(struct hdmi), GFP_KERNEL);
 	if(!hdmi)
@@ -189,7 +182,7 @@ static int __devinit rk30_hdmi_probe (struct platform_device *pdev)
 	register_early_suspend(&hdmi->early_suspend);
 	#endif
 		
-	hdmi_register_display_sysfs(hdmi, NULL);
+	hdmi->ddev = hdmi_register_display_sysfs(hdmi, NULL);
 	#ifdef CONFIG_SWITCH
 	hdmi->switch_hdmi.name="hdmi";
 	switch_dev_register(&(hdmi->switch_hdmi));
@@ -302,6 +295,6 @@ static void __exit rk30_hdmi_exit(void)
 }
 
 
-//fs_initcall(rk30_hdmi_init);
-module_init(rk30_hdmi_init);
+fs_initcall(rk30_hdmi_init);
+//module_init(rk30_hdmi_init);
 module_exit(rk30_hdmi_exit);

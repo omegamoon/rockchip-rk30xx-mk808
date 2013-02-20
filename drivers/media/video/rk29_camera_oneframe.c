@@ -1105,7 +1105,27 @@ static void rk29_camera_setup_format(struct soc_camera_device *icd, __u32 host_p
     struct rk29_camera_dev *pcdev = ici->priv;
     unsigned int vip_fs = 0,vip_crop = 0;
     unsigned int vip_ctrl_val = VIP_SENSOR|ONEFRAME|DISABLE_CAPTURE;
-
+//$_rbox_$_modify_$ zhy modified
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+	v4l2_std_id stdid = 0;
+	int ret = v4l2_subdev_call(sd, video, querystd, &stdid);    
+	if(ret == 0) {
+		vip_ctrl_val = VIP_CCIR656 |ONEFRAME|DISABLE_CAPTURE;
+		if(stdid == V4L2_STD_NTSC) {
+			printk("%s ntsc\n", __FUNCTION__);
+			vip_ctrl_val |= VIPREGNTSC;
+		}
+		else if(stdid == V4L2_STD_PAL) {
+			printk("%s pal\n", __FUNCTION__);
+			vip_ctrl_val |= VIPREGPAL;
+		}
+		else {
+			printk("%s unkown std, set as ntsc\n", __FUNCTION__);
+			vip_ctrl_val |= VIPREGNTSC;
+		}
+	}
+    printk("\n%s vip_ctrl_val is 0x%0x\n\n", __FUNCTION__, vip_ctrl_val);
+//$_rbox_$_modify_$ zhy modified end
     switch (host_pixfmt)
     {
         case V4L2_PIX_FMT_NV16:

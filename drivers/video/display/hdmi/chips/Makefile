@@ -1,0 +1,7 @@
+obj-$(CONFIG_ANX7150)		+= anx7150/
+obj-$(CONFIG_CAT6611)		+= cat6611/
+obj-$(CONFIG_SII902X)		+= sii902x/
+obj-$(CONFIG_SII92326)		+= SiI92326/
+obj-$(CONFIG_RK610_HDMI)	+= rk610/
+obj-$(CONFIG_IT66121)		+= it66121/
+obj-$(CONFIG_SII9244)		+= sii9244/

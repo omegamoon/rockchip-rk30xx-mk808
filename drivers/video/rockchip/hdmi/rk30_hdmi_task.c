@@ -9,7 +9,7 @@ extern void codec_set_spk(bool on);
 
 #define HDMI_MAX_TRY_TIMES	1
 
-static char *envp[] = {"INTERFACE=HDMI", NULL};
+//static char *envp[] = {"INTERFACE=HDMI", NULL};
 
 static void hdmi_sys_show_state(int state)
 {
@@ -48,6 +48,19 @@ static void hdmi_sys_show_state(int state)
 	}
 }
 
+static void hdmi_sys_send_uevent(int uevent)
+{
+	char *envp[3];
+	
+	envp[0] = "INTERFACE=HDMI";
+	envp[1] = kmalloc(32, GFP_KERNEL);
+	if(envp[1] == NULL)	return;
+	sprintf(envp[1], "SCREEN=%d", hdmi->ddev->property);
+	envp[2] = NULL;
+	kobject_uevent_env(&hdmi->ddev->dev->kobj, uevent, envp);
+	kfree(envp[1]);
+}
+
 int hdmi_sys_init(void)
 {
 	hdmi->pwr_mode			= PWR_SAVE_MODE_A;
@@ -63,7 +76,7 @@ int hdmi_sys_init(void)
 	hdmi->audio.word_length	= HDMI_AUDIO_DEFAULT_WORD_LENGTH;
 	
 	memset(&hdmi->edid, 0, sizeof(struct hdmi_edid));
-	INIT_LIST_HEAD(&hdmi->edid.modelist);
+	hdmi_init_modelist(hdmi);
 	return 0;
 }
 
@@ -79,10 +92,10 @@ void hdmi_sys_remove(void)
 		kfree(hdmi->edid.specs);
 	}
 	memset(&hdmi->edid, 0, sizeof(struct hdmi_edid));
-	INIT_LIST_HEAD(&hdmi->edid.modelist);
+	hdmi_init_modelist(hdmi);
 	hdmi->display	= HDMI_DISABLE;
 	rk_fb_switch_screen(hdmi->lcdc->screen, 0, HDMI_SOURCE_DEFAULT);
-	kobject_uevent_env(&hdmi->dev->kobj, KOBJ_REMOVE, envp);
+	hdmi_sys_send_uevent(KOBJ_REMOVE);
 	#ifdef CONFIG_SWITCH
 	switch_set_state(&(hdmi->switch_hdmi), 0);
 	#endif
@@ -221,7 +234,7 @@ void hdmi_work(struct work_struct *work)
 				if(rc == HDMI_ERROR_SUCESS)
 				{
 					hdmi->state = SYSTEM_CONFIG;	
-					kobject_uevent_env(&hdmi->dev->kobj, KOBJ_ADD, envp);
+					hdmi_sys_send_uevent(KOBJ_ADD);
 					#ifdef CONFIG_SWITCH
 					switch_set_state(&(hdmi->switch_hdmi), 1);
 					#endif
@@ -298,15 +311,6 @@ void hdmi_work(struct work_struct *work)
 	
 	}while((hdmi->state != state_last || (rc != HDMI_ERROR_SUCESS) ) && trytimes < HDMI_MAX_TRY_TIMES);
 	
-//	if(trytimes == HDMI_MAX_TRY_TIMES)
-//	{
-//		if(hdmi->hotplug) {
-//			hdmi_sys_remove();
-//			hdmi->hotplug = HDMI_HPD_REMOVED;
-//			hdmi_sys_sleep();
-//
-//		}
-//	}
 	hdmi_dbg(hdmi->dev, "[%s] done\n", __FUNCTION__);
 	mutex_unlock(&work_mutex);
 }

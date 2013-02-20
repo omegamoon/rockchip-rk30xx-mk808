@@ -165,6 +165,5 @@ source "drivers/staging/mei/Kconfig"
 
 source "drivers/staging/nvec/Kconfig"
 
-source "drivers/staging/sn/Kconfig"
-
+source "drivers/staging/rk29/eeprom/Kconfig"
 endif # STAGING

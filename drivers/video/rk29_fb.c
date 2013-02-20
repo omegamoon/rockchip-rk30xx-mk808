@@ -50,7 +50,6 @@
 
 #include <linux/hdmi.h>
 #endif
- 
 
 #include <mach/iomux.h>
 #include <mach/gpio.h>
@@ -62,9 +61,10 @@
 
 #include "./display/screen/screen.h"
 
-#ifdef CONFIG_MFD_RK610
-#include "./display/lcd/rk610_lcd.h"
+#ifdef CONFIG_DISPLAY_LCD_SUPPORT
+extern	void lcd_register_display_sysfs(void *devdata);
 #endif
+
 #define ANDROID_USE_THREE_BUFS  0       //android use three buffers to accelerate UI display in rgb plane
 #define CURSOR_BUF_SIZE         256     //RK2818 cursor need 256B buf
 int rk29_cursor_buf[CURSOR_BUF_SIZE];
@@ -182,6 +182,15 @@ struct win1_par {
     u32 addr_offset;
 };
 */
+struct rk29fb_scaleinfo {
+	int xrate;	// screen scale rate in x direction
+	int yrate;		// screen scale rate in y direction
+};
+
+static inline u32 calculate_res_scaled(u32 size, int rate)
+{
+	return size*rate/100;
+}
 
 struct rk29fb_inf {
     struct fb_info *fb1;
@@ -234,7 +243,12 @@ struct rk29fb_inf {
 #if 0 //def CONFIG_CPU_FREQ
     struct notifier_block freq_transition;
 #endif
-
+#if  defined(CONFIG_MACH_RK29_ITV_HOTDOG) || defined(CONFIG_MACH_RK29_ITV)
+	struct rk29fb_scaleinfo	scaleinfo;
+#endif
+#ifdef CONFIG_FB_DSP_LUT
+	u32	*dsp_lut;
+#endif
 };
 
 typedef enum _TRSP_MODE
@@ -247,31 +261,14 @@ typedef enum _TRSP_MODE
     TRSP_MASK,
     TRSP_INVAL
 } TRSP_MODE;
-#ifdef	FB_WIMO_FLAG
-struct wimo_fb_info{
-	unsigned long bitperpixel;
-	unsigned long mode;
-	unsigned long xaff;
-	unsigned long yaff;
-	unsigned long xpos;
-	unsigned long ypos;
-	unsigned long xsize;
-	unsigned long ysize;
-	unsigned long src_y;
-	unsigned long src_uv;
-	unsigned long dst_width;
-	unsigned long dst_height;
-	//struct mutex fb_lock;
-	volatile unsigned long fb_lock;
+#ifdef	CONFIG_FB_MIRRORING
 
+int (*video_data_to_mirroring)(struct fb_info *info,u32 yuv_phy[2]) = NULL;
+EXPORT_SYMBOL(video_data_to_mirroring);
 	
-};
-struct wimo_fb_info wimo_info;
-unsigned char* ui_buffer;
-unsigned char* ui_buffer_map;
-//unsigned char* overlay_buffer;
-//unsigned char* overlay_buffer_map;
 #endif
+
+
 
 struct platform_device *g_pdev = NULL;
 //static int win1fb_set_par(struct fb_info *info);
@@ -334,15 +331,74 @@ static int rk29fb_notify(struct rk29fb_inf *inf, unsigned long event)
 {
 	return blocking_notifier_call_chain(&rk29fb_notifier_list, event, inf->cur_screen);
 }
-void rk29_lcd_set(bool on)
+#ifdef CONFIG_FB_DSP_LUT
+#define DSP_LUT_ADDR    0x800
+#define DSP_LUT_SIZE 	0x400
+static int rk29_fb_lut_config(bool enable)
 {
-    struct rk29fb_info *mach_info = g_pdev->dev.platform_data;
-    if(on == 1 &&mach_info->io_enable)
-        mach_info->io_enable();       //open lcd out
-    else if(mach_info->io_disable)
-        mach_info->io_disable();  //close lcd out
-
+	struct rk29fb_inf *inf = platform_get_drvdata(g_pdev);
+	printk(">>>>%s enable =%d\n",__func__,enable);
+	if(enable && inf->dsp_lut){
+		LcdClrBit(inf, SYS_CONFIG, m_DSIP_LUT_CTL);
+		LcdWrReg(inf, REG_CFG_DONE, 0x01);
+		msleep(30);
+		if(inf->dsp_lut != NULL){
+			memcpy((inf->reg_vir_base + (DSP_LUT_ADDR)),inf->dsp_lut,DSP_LUT_SIZE );
+			LcdSetBit(inf, SYS_CONFIG, m_DSIP_LUT_CTL);
+			LcdWrReg(inf, REG_CFG_DONE, 0x01);
+		}
+	}else{
+		LcdClrBit(inf, SYS_CONFIG, m_DSIP_LUT_CTL);
+		LcdWrReg(inf, REG_CFG_DONE, 0x01);
+	}
+	return true;
 }
+
+static ssize_t store_lut(struct device *device,
+			     struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct rk29fb_inf *inf = platform_get_drvdata(g_pdev);
+	char *start = buf;
+	int i=256,j,temp;
+	int space_max = 10;
+
+	if(!inf->dsp_lut) {
+		inf->dsp_lut = (u32*)kmalloc(DSP_LUT_SIZE, GFP_KERNEL);
+	}
+	if(inf->dsp_lut) {		
+		for(i=0;i<256;i++)
+		{
+			space_max = 10;  //max space number 10;
+			inf->dsp_lut[i] = simple_strtoul(start,NULL,10);
+			do
+			{
+				start++;
+				space_max--;
+			}while ((*start != ' ')&&space_max);
+			
+			if(!space_max)
+				break;
+			else
+				start++;
+		}
+	
+		rk29_fb_lut_config(1);
+	}
+	return count;
+}
+
+static ssize_t show_lut(struct device *device,
+			    struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static struct device_attribute rk29fb_attrs[] = {
+	__ATTR(dsp_lut,/*S_IRUGO | S_IWUSR*/0777 , show_lut, store_lut),
+};
+#endif
+//$_rbox_$_modify_end
 int mcu_do_refresh(struct rk29fb_inf *inf)
 {
     if(inf->mcu_stopflush)  return 0;
@@ -623,6 +679,11 @@ void load_screen(struct fb_info *info, bool initscreen)
             LcdMskReg(inf, DSP_CTRL0, m_DITHER_UP_EN, v_DITHER_UP_EN(1));
             LcdMskReg(inf, DSP_CTRL0, m_DITHER_DOWN_EN | m_DITHER_DOWN_MODE, v_DITHER_DOWN_EN(0) | v_DITHER_DOWN_MODE(0));
             break;
+        case OUT_CCIR656:
+            face = OUT_CCIR656;
+            LcdMskReg(inf, DSP_CTRL0, m_DITHER_UP_EN, v_DITHER_UP_EN(0));
+            LcdMskReg(inf, DSP_CTRL0, m_DITHER_DOWN_EN | m_DITHER_DOWN_MODE, v_DITHER_DOWN_EN(0) | v_DITHER_DOWN_MODE(0));        
+        	break;
         default:
             LcdMskReg(inf, DSP_CTRL0, m_DITHER_UP_EN, v_DITHER_UP_EN(0));
             LcdMskReg(inf, DSP_CTRL0, m_DITHER_DOWN_EN | m_DITHER_DOWN_MODE, v_DITHER_DOWN_EN(0) | v_DITHER_DOWN_MODE(0));
@@ -636,7 +697,12 @@ void load_screen(struct fb_info *info, bool initscreen)
         v_DISPLAY_FORMAT(face) | v_HSYNC_POLARITY(screen->pin_hsync) | v_VSYNC_POLARITY(screen->pin_vsync) |
         v_DEN_POLARITY(screen->pin_den) | v_DCLK_POLARITY(screen->pin_dclk) | v_COLOR_SPACE_CONVERSION(0)
         );
-
+	if(face == OUT_CCIR656) {
+		LcdMskReg(inf, DSP_CTRL0, m_COLOR_SPACE_CONVERSION, v_COLOR_SPACE_CONVERSION(3));
+		// Backgroud color set to YUV Black.
+		LcdMskReg(inf, DSP_CTRL1, m_BG_COLOR,  v_BG_COLOR(0x801080) );
+	}
+	else
      LcdMskReg(inf, DSP_CTRL1, m_BG_COLOR,  v_BG_COLOR(0x000000) );
 
      LcdMskReg(inf, SWAP_CTRL, m_OUTPUT_RB_SWAP | m_OUTPUT_RG_SWAP | m_DELTA_SWAP | m_DUMMY_SWAP,
@@ -654,7 +720,26 @@ void load_screen(struct fb_info *info, bool initscreen)
              v_BIT12HI(screen->hsync_len + screen->left_margin + x_res + right_margin));
     LcdMskReg(inf, DSP_HACT_ST_END, m_BIT12LO | m_BIT12HI, v_BIT12LO(screen->hsync_len + screen->left_margin + x_res) |
              v_BIT12HI(screen->hsync_len + screen->left_margin));
+	if (face == OUT_CCIR656 && screen->mode == FB_VMODE_INTERLACED) {
+		int v_total, v_sync_end, v_active_start, v_active_end;
+		int v_sync_start_f1, v_sync_end_f1, v_active_start_f1, v_active_end_f1;
 
+		v_total = 2*(screen->vsync_len + screen->upper_margin + lower_margin)+  y_res + 1;
+		v_sync_end = screen->vsync_len;
+		v_active_start = v_sync_end + screen->upper_margin;
+		v_active_end = v_active_start + y_res/2;
+		LcdMskReg(inf, DSP_VTOTAL_VS_END, m_BIT11LO | m_BIT11HI, v_BIT11LO(v_sync_end) | v_BIT11HI(v_total));
+		LcdMskReg(inf, DSP_VACT_ST_END, m_BIT11LO | m_BIT11HI,	v_BIT11LO(v_active_end)| v_BIT11HI(v_active_start));
+		v_sync_start_f1 = v_active_end + screen->lower_margin;
+		v_sync_end_f1 = v_sync_start_f1 + screen->vsync_len;
+		v_active_start_f1 = v_sync_end_f1 + screen->upper_margin + 1;
+		v_active_end_f1 = v_active_start_f1 + y_res/2;
+		LcdMskReg(inf, DSP_VS_ST_END_F1, m_BIT11LO | m_BIT11HI, v_BIT11LO(v_sync_end_f1) | v_BIT11HI(v_sync_start_f1));
+		LcdMskReg(inf, DSP_VACT_ST_END_F1, m_BIT11LO | m_BIT11HI, v_BIT11LO(v_active_end_f1)| v_BIT11HI(v_active_start_f1));
+		LcdMskReg(inf, SYS_CONFIG, m_W0_CBR_DEFLICK_EN | m_W0_YRGB_DEFLICK_EN | m_INTERIACE_EN | m_W0_INTERLACE_READ | m_W1_INTERLACE_READ | m_W2_INTERLACE_READ,
+			v_W0_CBR_DEFLICK_EN(1) | v_W0_YRGB_DEFLICK_EN(1) | v_INTERIACE_EN(1) | v_W0_INTERLACE_READ(0) | v_W1_INTERLACE_READ(0) | v_W2_INTERLACE_READ(0) );
+	}
+	else {		
     LcdMskReg(inf, DSP_VTOTAL_VS_END, m_BIT11LO | m_BIT11HI, v_BIT11LO(screen->vsync_len) |
               v_BIT11HI(screen->vsync_len + screen->upper_margin + y_res + lower_margin));
     LcdMskReg(inf, DSP_VACT_ST_END, m_BIT11LO | m_BIT11HI,  v_BIT11LO(screen->vsync_len + screen->upper_margin+y_res)|
@@ -662,6 +747,9 @@ void load_screen(struct fb_info *info, bool initscreen)
 
     LcdMskReg(inf, DSP_VS_ST_END_F1, m_BIT11LO | m_BIT11HI, v_BIT11LO(0) | v_BIT11HI(0));
     LcdMskReg(inf, DSP_VACT_ST_END_F1, m_BIT11LO | m_BIT11HI, v_BIT11LO(0) | v_BIT11HI(0));
+		LcdMskReg(inf, SYS_CONFIG, m_W0_CBR_DEFLICK_EN | m_W0_YRGB_DEFLICK_EN | m_INTERIACE_EN | m_W0_INTERLACE_READ | m_W1_INTERLACE_READ | m_W2_INTERLACE_READ,
+			v_W0_CBR_DEFLICK_EN(0) | v_W0_YRGB_DEFLICK_EN(0) | v_INTERIACE_EN(0) | v_W0_INTERLACE_READ(0) | v_W1_INTERLACE_READ(0) | v_W2_INTERLACE_READ(0) );
+	} 
 
 	// let above to take effect
     LcdWrReg(inf, REG_CFG_DONE, 0x01);
@@ -713,9 +801,10 @@ void load_screen(struct fb_info *info, bool initscreen)
     if(initscreen)
     {
         ret = clk_set_parent(inf->aclk, inf->aclk_parent);
-        if(screen->lcdc_aclk){
-           aclk_rate = screen->lcdc_aclk;
-        }
+//        if(screen->lcdc_aclk){
+//           aclk_rate = screen->lcdc_aclk;
+//        }
+		aclk_rate = clk_get_rate(inf->aclk_parent);
         ret = clk_set_rate(inf->aclk, aclk_rate);
         if(ret){
             printk(KERN_ERR ">>>>>> set lcdc aclk failed\n");
@@ -815,12 +904,17 @@ int rk29_set_cursor_pos(struct rk29fb_inf *inf, int x, int y)
 {
 	struct rk29fb_screen *screen = inf->cur_screen;
 
+	struct rk29fb_screen *init_screen = &(inf->panel1_info);
+
     /* set data */
     if (x >= 0x800 || y >= 0x800 )
         return -EINVAL;
 	//printk("%s: %08x,%08x \n",__func__, x, y);
-    x += (screen->left_margin + screen->hsync_len);
-    y += (screen->upper_margin + screen->vsync_len);
+
+    x = (x*calculate_res_scaled(screen->x_res, inf->scaleinfo.xrate))/init_screen->x_res;
+    y = y*calculate_res_scaled(screen->y_res, inf->scaleinfo.yrate)/init_screen->y_res;
+    x += (screen->left_margin + screen->hsync_len) + calculate_res_scaled(screen->x_res, 100 - inf->scaleinfo.xrate)/2;
+    y += (screen->upper_margin + screen->vsync_len) + calculate_res_scaled(screen->y_res, 100 - inf->scaleinfo.yrate)/2;
     LcdWrReg(inf, HWC_DSP_ST, v_BIT11LO(x)|v_BIT11HI(y));
 	LcdWrReg(inf, REG_CFG_DONE, 0x01);
     return 0;
@@ -1019,7 +1113,7 @@ static int hdmi_get_fbscale(void)
 }
 static void hdmi_set_fbscale(struct fb_info *info)
 {
-#ifdef CONFIG_HDMI
+#if defined(CONFIG_HDMI)
     struct rk29fb_inf *inf = dev_get_drvdata(info->device);
     struct rk29fb_screen *screen = inf->cur_screen;
     struct win0_par *par = info->par;
@@ -1121,6 +1215,9 @@ static int win0_set_par(struct fb_info *info)
     uv_addr = fix->mmio_start + par->c_offset;
 
     ScaleYrgbX = CalScaleW0(xact, par->xsize);
+	if(screen->face == OUT_CCIR656 && screen->mode == FB_VMODE_INTERLACED) {
+		par->ysize /= 2;    
+	}
     ScaleYrgbY = CalScaleW0(yact, par->ysize);
 
     switch (par->format)
@@ -1505,7 +1602,7 @@ static int fb0_set_par(struct fb_info *info)
     u16 xres_virtual = var->xres_virtual;      //virtual screen size
     u16 xpos_virtual = var->xoffset;           //visiable offset in virtual screen
     u16 ypos_virtual = var->yoffset;
-
+	int x_res_scaled, y_res_scaled;
 #ifdef CONFIG_FB_SCALING_OSD
     struct rk29_ipp_req ipp_req;
     u32 dstoffset=0;
@@ -1639,12 +1736,19 @@ static int fb0_set_par(struct fb_info *info)
     }
     else
     {
+        x_res_scaled = calculate_res_scaled(screen->x_res, inf->scaleinfo.xrate);
+        y_res_scaled = calculate_res_scaled(screen->y_res, inf->scaleinfo.yrate);
         par->y_offset = offset;
-        par->xpos = 0;
-        par->ypos = 0;
-        par->xsize = screen->x_res;
-        par->ysize = screen->y_res;
+        par->xpos = (screen->x_res - x_res_scaled)/2;
+        par->ypos = (screen->y_res - y_res_scaled)/2;
+        par->xsize = x_res_scaled;
+        par->ysize = y_res_scaled;
         win0_set_par(info);
+     #ifdef	CONFIG_FB_MIRRORING
+	 if(video_data_to_mirroring!=NULL)
+		video_data_to_mirroring(info,NULL);
+     #endif
+	 
     }
     inf->setFlag = 1;
 	idle_condition = 1;
@@ -1767,184 +1871,6 @@ static int fb0_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
     return 0;
 }
 
-#ifdef	FB_WIMO_FLAG
-unsigned long temp_vv;
-static int frame_num = 0;
-static int wimo_set_buff(struct fb_info *info,unsigned long *temp)
-{
-	struct rk29fb_inf *inf = dev_get_drvdata(info->device);
-
-	ui_buffer = temp[0];
-	ui_buffer_map = ioremap(temp[0],temp[1]);
-	if(ui_buffer_map == NULL)
-	{
-		printk("can't map a buffer for ui\n");
-		return -EFAULT;
-	}
-
-	printk("ui_buffer %x  ",ui_buffer_map);
-	memset(&wimo_info,0,sizeof(wimo_info) );
- 
-      wimo_info.mode = inf->video_mode;
-//	wimo_info.bitperpixel = var->bits_per_pixel;		
-    
-
-	wimo_info.dst_width = (temp[2] + 15) & 0xfff0;
-	wimo_info.dst_height = (temp[3] + 15) & 0xfff0;
-}
-static int wimo_get_buff(struct fb_info *info)
-{
-	
-	struct rk29_ipp_req overlay_req;
-	struct rk29_ipp_req overlay_req_1;
-	struct rk29fb_inf *inf = dev_get_drvdata(info->device);
-	int ret;
-	memset(&overlay_req, 0 , sizeof(overlay_req));
-	memset(&overlay_req_1, 0 , sizeof(overlay_req_1));
-	
-	if(inf->video_mode == 0 )
-	{
-		struct win0_par *par = info->par;
-		wimo_info.xpos = 0;
-		wimo_info.ypos = 0;
-		wimo_info.xsize = 0;
-		wimo_info.ysize = 0;
-		wimo_info.mode = 0;
-		if(par->format == 1)
-			wimo_info.bitperpixel = 16;
-		else
-			wimo_info.bitperpixel =32;// wimo_info.bitperpixel_fb1;
-		overlay_req.src0.YrgbMst = info->fix.smem_start + par->y_offset;//info->screen_base + par->y_offset;//info_buffer[8];
-		overlay_req.src0.CbrMst = info->fix.smem_start + par->y_offset + wimo_info.dst_width * wimo_info.dst_height;//dst_width*dst_height;//+ par->y_offset + dst_width*dst_height;//info_buffer[9];
-		overlay_req.src0.w = wimo_info.dst_width ;//dst_width;//info_buffer[2];
-		overlay_req.src0.h = wimo_info.dst_height ;//dst_height;//info_buffer[3];
-		overlay_req.src0.fmt = (wimo_info.bitperpixel == 16) ? 1 : 0;//3;
-		overlay_req.dst0.YrgbMst = ui_buffer;//overlay_buffer + info_buffer[4] + info_buffer[5] * dst_width;
-		overlay_req.dst0.CbrMst = ui_buffer + wimo_info.dst_width * wimo_info.dst_height;//dst_width*dst_height;//(unsigned char*) overlay_buffer + dst_width*dst_height +info_buffer[4] + (  info_buffer[5] * dst_width) / 2;// info_buffer[6] * info_buffer[7];
-		overlay_req.dst0.w = wimo_info.dst_width ;//dst_width;//info_buffer[6];
-		overlay_req.dst0.h = wimo_info.dst_height ;//dst_height;//info_buffer[7];
-		overlay_req.dst0.fmt = (wimo_info.bitperpixel== 16) ? 1 : 0;//3;3;
-		overlay_req.deinterlace_enable = 0;
-		overlay_req.timeout = 1000000;
-		overlay_req.src_vir_w = wimo_info.dst_width ;//dst_width;//info_buffer[2];
-		overlay_req.dst_vir_w = wimo_info.dst_width ;//dst_width;
-		overlay_req.flag = IPP_ROT_0;
-		ipp_blit_sync(&overlay_req);
-		
-		ret = 0;
-	}	
-	else
-	{
-
-		int err = 0;
-		static int wimo_time = 0;
-		unsigned long *overlay_buffer_map_temp;
-		unsigned long *map_temp;
-		unsigned long sign_memset = 0;
-		struct fb_var_screeninfo *var = &inf->fb1->var;
-		struct win0_par *par = inf->fb1->par;
-		wimo_info.mode = 1;
-	//	printk("overlay setbuffer in\n");
-	//	mutex_lock(&wimo_info.fb_lock);
-		wimo_info.fb_lock = 1;
-		{
-			wimo_info.xaff = var->xres;
-			wimo_info.yaff = var->yres;
-			if((wimo_info.xpos != par->xpos) ||(wimo_info.ypos != par->ypos)||(wimo_info.xsize != par->xsize) ||(wimo_info.ysize != par->ysize))
-			{
-				wimo_info.xpos = par->xpos;
-				wimo_info.ypos = par->ypos;
-				wimo_info.xsize = par->xsize;
-				wimo_info.ysize = par->ysize;
-				sign_memset = 1;
-				memset(ui_buffer_map,0,wimo_info.dst_height * wimo_info.dst_width);//dst_width*dst_height);
-				memset(ui_buffer_map + wimo_info.dst_height * wimo_info.dst_width, 0x80,wimo_info.dst_height * wimo_info.dst_width / 2);//dst_width*dst_height,0x80,dst_width*dst_height/2);
-				printk("wimo_info.xpos %d wimo_info.ypos %d wimo_info.xsize %d wimo_info.ysize %d\n",wimo_info.xpos, wimo_info.ypos, wimo_info.xsize, wimo_info.ysize );
-		    	}
-		}
-		//printk("wimo_info.xpos %d wimo_info.ypos %d wimo_info.xsize %d wimo_info.ysize %d\n",wimo_info.xpos, wimo_info.ypos, wimo_info.xsize, wimo_info.ysize );
-		if(wimo_info.xaff * 3 < wimo_info.xsize || wimo_info.yaff * 3 < wimo_info.ysize)// 3time or bigger scale up
-		{
-			unsigned long mid_width, mid_height;
-			struct rk29_ipp_req overlay_req_1;
-			if(wimo_info.xaff * 3 < wimo_info.xsize)
-				mid_width = wimo_info.xaff * 3;
-			else
-				mid_width = wimo_info.xsize;
-			
-			if(wimo_info.yaff * 3 < wimo_info.ysize)
-				mid_height =  wimo_info.yaff * 3;
-			else
-				mid_height = wimo_info.ysize;
-			overlay_req.src0.YrgbMst = wimo_info.src_y;//info_buffer[8];
-			overlay_req.src0.CbrMst = wimo_info.src_uv;//info_buffer[9];
-			overlay_req.src0.w = wimo_info.xaff;// info_buffer[2];
-			overlay_req.src0.h = wimo_info.yaff;// info_buffer[3];
-			overlay_req.src0.fmt = 3;
-			overlay_req.dst0.YrgbMst = ui_buffer + 2048000 ;//info_buffer[4] + info_buffer[5] * dst_width;   //小尺寸片源需要2次放大，所以将buffer的后半段用于缓存
-			overlay_req.dst0.CbrMst = (unsigned char*) ui_buffer + mid_height * mid_width + 2048000;
-		
-			overlay_req.dst0.w = mid_width;//info_buffer[6];
-			overlay_req.dst0.h = mid_height;//info_buffer[7];
-			overlay_req.dst0.fmt = 3;
-			overlay_req.timeout = 100000;
-			overlay_req.src_vir_w = wimo_info.xaff;//info_buffer[2];
-			overlay_req.dst_vir_w = mid_width;//dst_width;
-			overlay_req.flag = IPP_ROT_0;
-
-			overlay_req_1.src0.YrgbMst = ui_buffer + 2048000;
-			overlay_req_1.src0.CbrMst = (unsigned char*) ui_buffer + mid_height * mid_width + 2048000;
-			overlay_req_1.src0.w = mid_width;
-			overlay_req_1.src0.h = mid_height;// info_buffer[3];
-			overlay_req_1.src0.fmt = 3;
-			overlay_req_1.dst0.YrgbMst = ui_buffer + ((wimo_info.xpos + 1)&0xfffe) + wimo_info.ypos * wimo_info.dst_width;//info_buffer[4] + info_buffer[5] * dst_width;
-			overlay_req_1.dst0.CbrMst =(unsigned char*) ui_buffer + wimo_info.dst_width * wimo_info.dst_height + ((wimo_info.xpos + 1)&0xfffe) + ( wimo_info.ypos  / 2)* wimo_info.dst_width ;
-			
-			overlay_req_1.dst0.w = wimo_info.xsize;//info_buffer[6];
-			overlay_req_1.dst0.h = wimo_info.ysize;//info_buffer[7];
-			overlay_req_1.dst0.fmt = 3;
-			overlay_req_1.timeout = 100000;
-			overlay_req_1.src_vir_w = mid_width;//info_buffer[2];
-			overlay_req_1.dst_vir_w = wimo_info.dst_width;//dst_width;
-			overlay_req_1.flag = IPP_ROT_0;
-			
-
-			err = ipp_blit_sync(&overlay_req);
-			dmac_flush_range(ui_buffer_map,ui_buffer_map + wimo_info.dst_height * wimo_info.dst_width * 3/2);//dst_width*dst_height*3/2);
-			err = ipp_blit_sync(&overlay_req_1);
-	
-		}
-		else
-		{
-			overlay_req.src0.YrgbMst = wimo_info.src_y;//info_buffer[8];
-			overlay_req.src0.CbrMst = wimo_info.src_uv;//info_buffer[9];
-			overlay_req.src0.w = wimo_info.xaff;// info_buffer[2];
-			overlay_req.src0.h = wimo_info.yaff;// info_buffer[3];
-			overlay_req.src0.fmt = 3;
-			overlay_req.dst0.YrgbMst = ui_buffer + ((wimo_info.xpos + 1)&0xfffe) + wimo_info.ypos * wimo_info.dst_width;//info_buffer[4] + info_buffer[5] * dst_width;
-			overlay_req.dst0.CbrMst =(unsigned char*) ui_buffer + wimo_info.dst_width * wimo_info.dst_height + ((wimo_info.xpos + 1)&0xfffe) + ( wimo_info.ypos  / 2)* wimo_info.dst_width ;
-			
-			overlay_req.dst0.w = wimo_info.xsize;//wimo_info.xsize;//wimo_info.xaff;// wimo_info.xsize;//info_buffer[6];
-			overlay_req.dst0.h = (wimo_info.ysize + 1) & 0xfffe;//(wimo_info.ysize + 1) & 0xfffe;//wimo_info.yaff;//(wimo_info.ysize + 1) & 0xfffe;//info_buffer[7];
-			overlay_req.dst0.fmt = 3;
-			overlay_req.timeout = 100000;
-			overlay_req.src_vir_w = wimo_info.xaff;//info_buffer[2];
-			overlay_req.dst_vir_w = wimo_info.dst_width;//wimo_info.dst_width;//wimo_info.yaff;//wimo_info.dst_width;//dst_width;
-			overlay_req.flag = IPP_ROT_0;
-			
-			dmac_flush_range(ui_buffer_map,ui_buffer_map + wimo_info.dst_height * wimo_info.dst_width * 3/2);//dst_width*dst_height*3/2);
-			err = ipp_blit_sync(&overlay_req);
-		
-		}
-	//	printk("overlay setbuffer exit\n");
-		ret = 1;
-		wimo_info.fb_lock = 0;
-	}
-	
-		
-	return ret;
-}
-#endif
 static int fb0_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 {
     struct rk29fb_inf *inf = dev_get_drvdata(info->device);
@@ -2043,53 +1969,20 @@ static int fb0_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
             if(copy_to_user((void*)arg, &en, 4))  return -EFAULT;
             break;
 		}
-#ifdef	FB_WIMO_FLAG
-	case FB0_IOCTL_SET_BUF:
+
+#if  defined(CONFIG_MACH_RK29_ITV_HOTDOG) || defined(CONFIG_MACH_RK29_ITV)
+	case FBIOPUT_SET_SCALE_RATE:
 		{
-    			unsigned long temp[4];
-			copy_from_user(temp, (void*)arg, 20);
-			wimo_set_buff( info,temp);
-			
+			int rate = 0;
+			if(copy_from_user(&rate, (void*)arg, sizeof(int)))
+				return -EFAULT;
+			inf->scaleinfo.xrate = rate;
+			inf->scaleinfo.yrate = rate;
+			fb0_set_par(inf->fb0);
 		}
 		break;
-	case FB0_IOCTL_CLOSE_BUF:
-		{
-			if(ui_buffer != NULL && ui_buffer_map !=NULL )
-			{
-				iounmap(ui_buffer_map);
-				ui_buffer_map = 0;
-				ui_buffer = 0;
-				memset(&wimo_info,0,sizeof(wimo_info));
-			}
-			else
-				printk("somethint wrong with wimo in close");
-				
-		}
-		break;
-	
-	case FB0_IOCTL_COPY_CURBUF:
-		{
-			unsigned long temp_data[3];
-			copy_from_user(&temp_vv, (void*)arg, 4);
-			if(ui_buffer != NULL && ui_buffer_map !=NULL )
-			{
-				temp_data[1] = wimo_get_buff(info);
-				temp_data[0] = wimo_info.bitperpixel;
-				
-			}
-			else
-			{
-				temp_data[1] = 1;
-				temp_data[0] = wimo_info.bitperpixel;
-				printk("somethint wrong with wimo in getbuf");
-			}
-			temp_data[2] = frame_num++;
-			//printk("FB0_IOCTL_COPY_CURBUF %d %d %d\n",temp_data[0],temp_data[1],temp_data[2]);
-			copy_to_user((void*)arg, &temp_data, 12);
-			break;
-		}
 #endif
-   default:
+	default:
         break;
     }
     return 0;
@@ -2657,14 +2550,6 @@ static int fb1_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
     case FB1_IOCTL_SET_YUV_ADDR:    //set y&uv address to register direct
         {
             u32 yuv_phy[2];
-#ifdef	FB_WIMO_FLAG
-	//	printk("FB1_IOCTL_SET_YUV_ADDR1 \n");
-	//	while(wimo_info.fb_lock)
-	//		{
-	//		msleep(10);
-	//		}
-	//	printk("FB1_IOCTL_SET_YUV_ADDR 2\n");
-#endif
             if (copy_from_user(yuv_phy, argp, 8))
 			    return -EFAULT;
 #ifdef CONFIG_FB_ROTATE_VIDEO 
@@ -2679,11 +2564,16 @@ static int fb1_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
             fix0->mmio_start = yuv_phy[1];
             yuv_phy[0] += par->y_offset;
             yuv_phy[1] += par->c_offset;
-#ifdef	FB_WIMO_FLAG
-	      wimo_info.src_y = yuv_phy[0]; 
-	      wimo_info.src_uv = yuv_phy[1]; 
-	      	
+
+#ifdef	CONFIG_FB_MIRRORING
+		if(v_W0_ENABLE(par->par_seted && par->addr_seted))
+		{
+			if(video_data_to_mirroring!=NULL)
+				 video_data_to_mirroring(info,yuv_phy);
+		}	
 #endif
+
+
          
             #if 0
     		if((var->rotate == 90) ||(var->rotate == 270))
@@ -2922,6 +2812,9 @@ int FB_Switch_Screen( struct rk29fb_screen *screen, u32 enable )
     if(enable)inf->cur_screen = &inf->panel2_info;
     else inf->cur_screen = &inf->panel1_info;
 
+#ifdef CONFIG_FB_DSP_LUT
+	rk29_fb_lut_config(1);
+#endif
     /* Black out, because some display device need clock to standby */
     //LcdMskReg(inf, DSP_CTRL_REG1, m_BLACK_OUT, v_BLACK_OUT(1));
    // LcdMskReg(inf, SYS_CONFIG, m_W0_ENABLE, v_W0_ENABLE(0));
@@ -2934,19 +2827,10 @@ int FB_Switch_Screen( struct rk29fb_screen *screen, u32 enable )
 
     if(inf->cur_screen->standby)    inf->cur_screen->standby(1);
     // operate the display_on pin to power down the lcd
-#ifdef CONFIG_HDMI_DUAL_DISP
-	if(inf->panel1_info.sscreen_get!=NULL)
-    	inf->panel1_info.sscreen_get(&inf->panel1_info,inf->panel2_info.hdmi_resolution);
-	else
-		printk("warnig : LCD driver do not support dual display");
-	if(inf->panel1_info.sscreen_set!=NULL)
-    	inf->panel1_info.sscreen_set(&inf->panel1_info,enable);
-	else
-		printk("warnig : LCD driver do not support dual display");
-#else
+   
     if(enable && mach_info->io_disable)mach_info->io_disable();  //close lcd out
     else if (mach_info->io_enable)mach_info->io_enable();       //open lcd out
-#endif
+    
     load_screen(inf->fb0, 0);
 	mcu_refresh(inf);
 
@@ -2954,7 +2838,6 @@ int FB_Switch_Screen( struct rk29fb_screen *screen, u32 enable )
     fb0_set_par(inf->fb0);
     LcdMskReg(inf, DSP_CTRL1, m_BLACK_MODE,  v_BLACK_MODE(0));
     LcdWrReg(inf, REG_CFG_DONE, 0x01);
-
     rk29fb_notify(inf, enable ? RK29FB_EVENT_HDMI_ON : RK29FB_EVENT_HDMI_OFF);
     return 0;
 }
@@ -2992,6 +2875,43 @@ static ssize_t dsp_win0_info_write(struct device *device,
 }
 
 static DEVICE_ATTR(dsp_win0_info,  S_IRUGO|S_IWUSR, dsp_win0_info_read, dsp_win0_info_write);
+
+static ssize_t dsp_win0_scale_read(struct device *device,
+			    struct device_attribute *attr, char *buf)
+{
+	struct rk29fb_inf *inf = platform_get_drvdata(g_pdev);
+	return snprintf(buf, PAGE_SIZE, "xscale=%d yscale=%d\n", inf->scaleinfo.xrate, inf->scaleinfo.yrate);
+}
+
+static ssize_t dsp_win0_scale_write(struct device *device,
+			   struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct rk29fb_inf *inf = platform_get_drvdata(g_pdev);
+	int scale;
+	
+	if(!strncmp(buf, "xscale", 6)) {
+		sscanf(buf, "xscale=%d", &scale);
+		if(scale >= 0 && scale <= 100)
+			inf->scaleinfo.xrate = scale;
+	}
+	else if(!strncmp(buf, "yscale", 6)) {
+		sscanf(buf, "yscale=%d", &scale);
+		if(scale >= 0 && scale <= 100)
+			inf->scaleinfo.yrate = scale;
+	}
+	else {
+		sscanf(buf, "%d", &scale);
+		if(scale >= 0 && scale <= 100) {
+			inf->scaleinfo.xrate = scale;
+			inf->scaleinfo.yrate = scale;
+		}
+	}
+	printk("scale rate x %d y %d\n", inf->scaleinfo.xrate, inf->scaleinfo.yrate);
+	fb0_set_par(inf->fb0);
+	return count;
+}
+
+static DEVICE_ATTR(dsp_win0_scale, S_IRUGO|S_IWUSR, dsp_win0_scale_read, dsp_win0_scale_write);
 
 static irqreturn_t rk29fb_irq(int irq, void *dev_id)
 {
@@ -3092,13 +3012,10 @@ static void rk29fb_early_suspend(struct early_suspend *h)
 #ifdef CONFIG_CLOSE_WIN1_DYNAMIC   
      cancel_delayed_work_sync(&rk29_win1_check_work);
 #endif  
-#ifdef CONFIG_HDMI_DUAL_DISP
-    if(mach_info->io_disable)  // close lcd pwr when output screen is lcd
-       mach_info->io_disable();  //close lcd out 
-#else
+
     if((inf->cur_screen != &inf->panel2_info) && mach_info->io_disable)  // close lcd pwr when output screen is lcd
        mach_info->io_disable();  //close lcd out 
-#endif
+
 	if(inf->cur_screen->standby)
 	{
 		fbprintk(">>>>>> power down the screen! \n");
@@ -3182,14 +3099,14 @@ static void rk29fb_early_resume(struct early_suspend *h)
 	}
     usleep_range(10*1000, 10*1000);
     memcpy((u8*)inf->preg, (u8*)&inf->regbak, 0xa4);  //resume reg
+#ifdef CONFIG_FB_DSP_LUT
+	rk29_fb_lut_config(1);
+#endif
     usleep_range(40*1000, 40*1000);
-    #ifdef CONFIG_HDMI_DUAL_DISP
-    if(mach_info->io_enable)  // open lcd pwr when output screen is lcd
-       mach_info->io_enable();  //close lcd out 
-    #else
+    
     if((inf->cur_screen != &inf->panel2_info) && mach_info->io_enable)  // open lcd pwr when output screen is lcd
        mach_info->io_enable();  //close lcd out 
-    #endif
+       	
 }
 
 static struct suspend_info suspend_info = {
@@ -3232,7 +3149,10 @@ static int __devinit rk29fb_probe (struct platform_device *pdev)
    #else
     set_lcd_info(&inf->panel1_info, mach_info->lcd_info);
    #endif
-
+#if  defined(CONFIG_MACH_RK29_ITV_HOTDOG) || defined(CONFIG_MACH_RK29_ITV)
+	inf->scaleinfo.xrate = 100;
+	inf->scaleinfo.yrate = 100;
+#endif
     inf->cur_screen = &inf->panel1_info;
     screen = inf->cur_screen;
     if(SCREEN_NULL==screen->type)
@@ -3479,10 +3399,33 @@ static int __devinit rk29fb_probe (struct platform_device *pdev)
 		goto unregister_win1fb;
     }
 
+#ifdef CONFIG_FB_DSP_LUT
+	rk29_fb_lut_config(1);
+    ret = device_create_file(inf->fb0->dev, &rk29fb_attrs[0]);
+    if(ret)
+    {
+        printk(">> fb1 dsp win0 info device_create_file err\n");
+        ret = -EINVAL;
+    }
+	ret = device_create_file(inf->fb1->dev, &rk29fb_attrs[0]);
+    if(ret)
+    {
+        printk(">> fb1 dsp win0 info device_create_file err\n");
+        ret = -EINVAL;
+    }
+#endif
+
     ret = device_create_file(inf->fb1->dev, &dev_attr_dsp_win0_info);
     if(ret)
     {
         printk(">> fb1 dsp win0 info device_create_file err\n");
+        ret = -EINVAL;
+    }
+
+    ret = device_create_file(inf->fb1->dev, &dev_attr_dsp_win0_scale);
+    if(ret)
+    {
+        printk(">> fb1 dsp win0 scale device_create_file err\n");
         ret = -EINVAL;
     }
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -3515,9 +3458,7 @@ static int __devinit rk29fb_probe (struct platform_device *pdev)
             goto release_irq;
         }
     }
- #ifdef CONFIG_MFD_RK610
-    rk610_lcd_scaler_set_param(&inf->panel1_info,0);
- #endif
+
 #if !defined(CONFIG_FRAMEBUFFER_CONSOLE) && defined(CONFIG_LOGO)
     fb0_set_par(inf->fb0);
     if (fb_prepare_logo(inf->fb0, FB_ROTATE_UR)) {
@@ -3527,6 +3468,10 @@ static int __devinit rk29fb_probe (struct platform_device *pdev)
         fb0_blank(FB_BLANK_UNBLANK, inf->fb0);
     }
 #endif
+
+	#ifdef CONFIG_DISPLAY_LCD_SUPPORT
+	lcd_register_display_sysfs(pdev);
+	#endif
 
     printk(" %s ok\n", __FUNCTION__);
     return ret;
@@ -3702,7 +3647,8 @@ static void __exit rk29fb_exit(void)
     platform_driver_unregister(&rk29fb_driver);
 }
 
-fs_initcall(rk29fb_init);
+//fs_initcall(rk29fb_init);
+subsys_initcall(rk29fb_init);
 module_exit(rk29fb_exit);
 
 

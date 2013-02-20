@@ -13,7 +13,6 @@
 #include <asm/tlbflush.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/hardware/gic.h>
-#include <linux/regulator/rk29-pwm-regulator.h>
 
 #include <mach/pmu.h>
 #include <mach/board.h>
@@ -37,11 +36,6 @@
 	(_save)=cru_readl(cons);\
 	cru_writel((((~(val)|(_save))&(w_msk))|((w_msk)<<16)),cons)
 
-#define pwm_write_reg(id, addr, val)        __raw_writel(val, addr+(RK30_PWM01_BASE+(id>>1)*0x20000)+id*0x10)
-#define pwm_read_reg(id, addr)              __raw_readl(addr+(RK30_PWM01_BASE+(id>>1)*0x20000+id*0x10))
-
-extern rk29_suspend_voltage_set(unsigned int vol);
-extern rk29_suspend_voltage_resume(unsigned int vol);
 void __sramfunc sram_printch(char byte)
 {
 #ifdef DEBUG_UART_BASE
@@ -267,12 +261,7 @@ static noinline void interface_ctr_reg_pread(void)
 	readl_relaxed(RK30_GRF_BASE);
 	readl_relaxed(RK30_DDR_PCTL_BASE);
 	readl_relaxed(RK30_DDR_PUBL_BASE);
-	readl_relaxed(RK30_PWM01_BASE);
-
-	pwm_read_reg(3, PWM_REG_HRC);
-	pwm_read_reg(3, PWM_REG_LRC);
-	pwm_read_reg(3, PWM_REG_CTRL);
-	pwm_read_reg(3, PWM_REG_CNTR);
+	readl_relaxed(RK30_I2C1_BASE);
 }
 
 static inline bool pm_pmu_power_domain_is_on(enum pmu_power_domain pd, u32 pmu_pwrdn_st)
@@ -350,8 +339,15 @@ __weak void board_gpio_suspend(void) {}
 __weak void board_gpio_resume(void) {}
 __weak void __sramfunc board_pmu_suspend(void) {}
 __weak void __sramfunc board_pmu_resume(void) {}
+__weak void __sramfunc rk30_suspend_voltage_set(unsigned int vol){}
+__weak void __sramfunc rk30_suspend_voltage_resume(unsigned int vol){}
 
-extern int board_wm831x;
+__weak void  rk30_pwm_suspend_voltage_set(void){}
+__weak void  rk30_pwm_resume_voltage_set(void){}
+
+__weak void __sramfunc rk30_pwm_logic_suspend_voltage(void){}
+__weak void __sramfunc rk30_pwm_logic_resume_voltage(void){}
+
 static void __sramfunc rk30_sram_suspend(void)
 {
 	u32 cru_clksel0_con;
@@ -362,15 +358,13 @@ static void __sramfunc rk30_sram_suspend(void)
 	sram_printch('5');
 	ddr_suspend();
 	sram_printch('6');
+	rk30_suspend_voltage_set(1000000);
+	rk30_pwm_logic_suspend_voltage();
+	sram_printch('7');
 	
 	for (i = 0; i < CRU_CLKGATES_CON_CNT; i++) {
 		clkgt_regs[i] = cru_readl(CRU_CLKGATES_CON(i));
 	}
-
-#ifdef CONFIG_RK30_PWM_LOGIC_VOL
-	rk29_suspend_voltage_set(1000000);
-#endif
-
 
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_CORE_PERIPH)
@@ -378,8 +372,35 @@ static void __sramfunc rk30_sram_suspend(void)
 			  | (1 << CLK_GATE_HCLK_CPU)
 			  | (1 << CLK_GATE_PCLK_CPU)
 			  , clkgt_regs[0], CRU_CLKGATES_CON(0), 0xffff);
+
+			  
+#ifdef CONFIG_DWC_REMOTE_WAKEUP	
+	gate_save_soc_clk(0|(3<<5), clkgt_regs[1], CRU_CLKGATES_CON(1), 0xffff);//hzb
+	if(clkgt_regs[8]&((1<<12)|(1<13))){
+		gate_save_soc_clk(0
+				  | (1 << CLK_GATE_PEIRPH_SRC % 16)
+				  | (1 << CLK_GATE_PCLK_PEIRPH % 16)
+				  | (1 << CLK_GATE_HCLK_PEIRPH % 16)
+				, clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);
+	}else{
+		gate_save_soc_clk(0|(1 << CLK_GATE_HCLK_PEIRPH % 16)
+				, clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);
+
+	}
+#else	
 	gate_save_soc_clk(0, clkgt_regs[1], CRU_CLKGATES_CON(1), 0xffff);
-	gate_save_soc_clk(0, clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);
+	if(clkgt_regs[8]&((1<<12)|(1<13))){
+		gate_save_soc_clk(0
+				  | (1 << CLK_GATE_PEIRPH_SRC % 16)
+				  | (1 << CLK_GATE_PCLK_PEIRPH % 16)
+				, clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);
+	}else{
+		gate_save_soc_clk(0
+				, clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);
+
+	}
+#endif	
+
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_ACLK_STRC_SYS % 16)
 			  | (1 << CLK_GATE_ACLK_INTMEM % 16)
@@ -388,6 +409,7 @@ static void __sramfunc rk30_sram_suspend(void)
 			  | (1 << CLK_GATE_PCLK_GRF % 16)
 			  | (1 << CLK_GATE_PCLK_PMU % 16)
 			  , clkgt_regs[5], CRU_CLKGATES_CON(5), 0xffff);
+	 gate_save_soc_clk(0 , clkgt_regs[7], CRU_CLKGATES_CON(7), 0xffff);
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_CLK_L2C % 16)
 			  | (1 << CLK_GATE_ACLK_INTMEM0 % 16)
@@ -424,10 +446,10 @@ static void __sramfunc rk30_sram_suspend(void)
 		cru_writel(clkgt_regs[i] | 0xffff0000, CRU_CLKGATES_CON(i));
 	}
 
-#ifdef CONFIG_RK30_PWM_LOGIC_VOL
-	rk29_suspend_voltage_resume(1000000);
-#endif
-
+	sram_printch('7');
+	rk30_pwm_logic_resume_voltage();
+	rk30_suspend_voltage_resume(1100000);
+	
 	sram_printch('6');
 	ddr_resume();
 	sram_printch('5');
@@ -473,7 +495,7 @@ static int rk30_pm_enter(suspend_state_t state)
 	for (i = 0; i < CRU_CLKGATES_CON_CNT; i++) {
 		clkgt_regs[i] = cru_readl(CRU_CLKGATES_CON(i));
 	}
-/*
+
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_CORE_PERIPH)
 			  | (1 << CLK_GATE_DDRPHY)
@@ -481,12 +503,30 @@ static int rk30_pm_enter(suspend_state_t state)
 			  | (1 << CLK_GATE_HCLK_CPU)
 			  | (1 << CLK_GATE_PCLK_CPU)
 			  , clkgt_regs[0], CRU_CLKGATES_CON(0), 0xffff);
+ 
+#ifdef CONFIG_DWC_REMOTE_WAKEUP			  
 	gate_save_soc_clk(0
+			  | (1 << CLK_GATE_DDR_GPLL % 16)|(3 <<5)
+			  , clkgt_regs[1], CRU_CLKGATES_CON(1), 0xffff);
+	gate_save_soc_clk(0
+			  | (1 << CLK_GATE_PEIRPH_SRC % 16)
+			  | (1 << CLK_GATE_PCLK_PEIRPH % 16)
+			  | (1 << CLK_GATE_ACLK_PEIRPH % 16)
+			  | (1 << CLK_GATE_HCLK_PEIRPH % 16)
+			  , clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);		  
+#else
+  gate_save_soc_clk(0
 			  | (1 << CLK_GATE_DDR_GPLL % 16)
 			  , clkgt_regs[1], CRU_CLKGATES_CON(1), 0xffff);
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_PEIRPH_SRC % 16)
-			  , clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);
+			  | (1 << CLK_GATE_PCLK_PEIRPH % 16)
+			  | (1 << CLK_GATE_ACLK_PEIRPH % 16)
+			  , clkgt_regs[2], CRU_CLKGATES_CON(2), 0xffff);		  
+#endif	
+		  
+	
+			  
 	gate_save_soc_clk(0, clkgt_regs[3], CRU_CLKGATES_CON(3), 0xff9f);
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_HCLK_PERI_AXI_MATRIX % 16)
@@ -499,18 +539,16 @@ static int rk30_pm_enter(suspend_state_t state)
 			  | (1 << CLK_GATE_ACLK_STRC_SYS % 16)
 			  | (1 << CLK_GATE_ACLK_INTMEM % 16)
 			  , clkgt_regs[4], CRU_CLKGATES_CON(4), 0xffff);
-
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_PCLK_GRF % 16)
 			  | (1 << CLK_GATE_PCLK_PMU % 16)
 			  | (1 << CLK_GATE_PCLK_DDRUPCTL % 16)
 			  , clkgt_regs[5], CRU_CLKGATES_CON(5), 0xffff);
-
 	gate_save_soc_clk(0, clkgt_regs[6], CRU_CLKGATES_CON(6), 0xffff);
-	gate_save_soc_clk(0, clkgt_regs[7], CRU_CLKGATES_CON(7), 0xffff);
 	gate_save_soc_clk(0
-			  | (1 << CLK_GATE_PCLK_GPIO6 % 16)
-			  , clkgt_regs[8], CRU_CLKGATES_CON(8), 0xffff);
+			|(1 << CLK_GATE_PCLK_PWM23%16)
+			, clkgt_regs[7], CRU_CLKGATES_CON(7), 0xffff);
+	gate_save_soc_clk(0 , clkgt_regs[8], CRU_CLKGATES_CON(8), 0x01ff);
 	gate_save_soc_clk(0
 			  | (1 << CLK_GATE_CLK_L2C % 16)
 			  | (1 << CLK_GATE_PCLK_PUBL % 16)
@@ -519,12 +557,8 @@ static int rk30_pm_enter(suspend_state_t state)
 			  | (1 << CLK_GATE_ACLK_INTMEM2 % 16)
 			  | (1 << CLK_GATE_ACLK_INTMEM3 % 16)
 			  , clkgt_regs[9], CRU_CLKGATES_CON(9), 0x07ff);
-*/
-	sram_printch('2');
 
-gate_save_soc_clk(0
-			|(1<<CLK_GATE_PCLK_PWM01%16)
-			|(1<<CLK_GATE_PCLK_PWM23%16), clkgt_regs[7], CRU_CLKGATES_CON(7), 0xffff);
+	sram_printch('2');
 
 	cru_mode_con = cru_readl(CRU_MODE_CON);
 
@@ -558,6 +592,7 @@ gate_save_soc_clk(0
 	cru_writel(PLL_PWR_DN_W_MSK | PLL_PWR_DN, PLL_CONS(APLL_ID, 3));
 
 	sram_printch('3');
+	rk30_pwm_suspend_voltage_set();
 
 	board_gpio_suspend();
 
@@ -568,7 +603,7 @@ gate_save_soc_clk(0
 	sram_printch('4');
 
 	board_gpio_resume();
-
+	rk30_pwm_resume_voltage_set();
 	sram_printch('3');
 
 	//apll

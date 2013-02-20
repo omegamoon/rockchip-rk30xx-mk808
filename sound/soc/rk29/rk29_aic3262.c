@@ -39,22 +39,22 @@
 #include "rk29_pcm.h"
 #include "rk29_i2s.h"
 #include <linux/clk.h>
-#include <linux/mfd/tlv320aic3262-registers.h>
+
 #include "../codecs/tlv320aic326x.h"
 
 #if 0
-#define	DBG_AIC3262(x...)	printk(KERN_INFO x)
+#define	DBG(x...)	printk(KERN_INFO x)
 #else
-#define	DBG_AIC3262(x...)
+#define	DBG(x...)
 #endif
 
-//struct regulator *vddhf_reg=NULL;
+struct regulator *vddhf_reg=NULL;
 
 /* Headset jack */
-//static struct snd_soc_jack hs_jack;
+static struct snd_soc_jack hs_jack;
 
 /*Headset jack detection DAPM pins */
-/*static struct snd_soc_jack_pin hs_jack_pins[] = {
+static struct snd_soc_jack_pin hs_jack_pins[] = {
 	{
 		.pin = "Headset Mic",
 		.mask = SND_JACK_MICROPHONE,
@@ -94,7 +94,7 @@ static int spk_event(struct snd_soc_dapm_widget *w,
             }
         }
         return 0;
-}*/
+}
 
 
 
@@ -111,10 +111,10 @@ static const struct snd_soc_dapm_widget rk29_aic3262_dapm_widgets[] = {
 
 static const struct snd_soc_dapm_route audio_map[] = {
 	/* External Mics: MAINMIC, SUBMIC with bias*/
-	{"IN1L", NULL, "Mic Bias Int"},
-	{"IN1R", NULL, "Mic Bias Int"},
-	{"IN4L", NULL, "Mic Bias Int"},
-	{"IN4R", NULL, "Mic Bias Int"},
+	{"IN2L", NULL, "Mic Bias Int"},
+	{"IN2R", NULL, "Mic Bias Int"},
+	{"IN3L", NULL, "Mic Bias Int"},
+	{"IN3R", NULL, "Mic Bias Int"},
 	{"Mic Bias Int", NULL, "Ext Mic"},
 
 	/* External Speakers: HFL, HFR */
@@ -122,8 +122,8 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"Ext Spk", NULL, "SPKR"},
 
 	/* Headset Mic: HSMIC with bias */
-	{"IN2L", NULL, "Mic Bias Ext"},
-	{"IN2R", NULL, "Mic Bias Ext"},
+	{"IN1L", NULL, "Mic Bias Ext"},
+	{"IN1R", NULL, "Mic Bias Ext"},
 	{"Mic Bias Ext", NULL, "Headset Mic"},
 
 	/* Headset Stereophone (Headphone): HPL, HPR */
@@ -135,8 +135,8 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"Earphone Spk", NULL, "RECM"},
 
 	/* Aux/FM Stereo In: IN4L, IN4R */
-	{"IN3L", NULL, "FM Stereo In"},
-	{"IN3R", NULL, "FM Stereo In"},
+	{"IN4L", NULL, "FM Stereo In"},
+	{"IN4R", NULL, "FM Stereo In"},
 	
 	/* Aux/FM Stereo Out: LOL, LOR */
 	{"FM Stereo Out", NULL, "LOL"},
@@ -159,7 +159,7 @@ static int rk29_aic3262_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	int ret;
 
-	DBG_AIC3262("rk29_aic3262_init\n");
+	DBG("rk29_aic3262_init\n");
 
 	ret = snd_soc_add_controls(codec, rk29_aic326x_controls,
 				   ARRAY_SIZE(rk29_aic326x_controls));
@@ -184,14 +184,14 @@ static int rk29_aic3262_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 
 	/* Headset jack detection */
-	/*ret = snd_soc_jack_new(codec, "Headset Jack",
+	ret = snd_soc_jack_new(codec, "Headset Jack",
 				SND_JACK_HEADSET, &hs_jack);
 	if (ret)
 		return ret;
 
     ret = snd_soc_jack_add_pins(&hs_jack, ARRAY_SIZE(hs_jack_pins),
                             hs_jack_pins);  
-    aic3262_hs_jack_detect(codec, &hs_jack, SND_JACK_HEADSET);*/
+    aic3262_hs_jack_detect(codec, &hs_jack, SND_JACK_HEADSET);
        
     /* don't wait before switching of HS power */
 	rtd->pmdown_time = 0;
@@ -207,33 +207,35 @@ static int rk29_aif1_hw_params(struct snd_pcm_substream *substream,
 	unsigned int pll_out = 0; 
 	int div_bclk,div_mclk;
 	int ret;
+	struct clk	*general_pll;
+
 
 	printk("Enter::%s----%d\n",__FUNCTION__,__LINE__);
 
 	/* set codec DAI configuration */
 #if defined (CONFIG_SND_RK29_CODEC_SOC_SLAVE) 
-	DBG_AIC3262("Set codec_dai slave\n");
+	DBG("Set codec_dai slave\n");
 	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
 	 	SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS);
 #endif	
 #if defined (CONFIG_SND_RK29_CODEC_SOC_MASTER) 			   
 	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
 		SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFM);
-	DBG_AIC3262("Set codec_dai master\n");
+	DBG("Set codec_dai master\n");
 #endif
 	if (ret < 0)
 		return ret; 
 
 	/* set cpu DAI configuration */
 #if defined (CONFIG_SND_RK29_CODEC_SOC_SLAVE) 
-	DBG_AIC3262("Set cpu_dai master\n");
+	DBG("Set cpu_dai master\n");
 	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S |
 		SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFM);
 #endif	
 #if defined (CONFIG_SND_RK29_CODEC_SOC_MASTER)  
 	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S |
 		SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS);	
-	DBG_AIC3262("Set cpu_dai slave\n"); 
+	DBG("Set cpu_dai slave\n"); 
 #endif		
 	if (ret < 0)
 		return ret;
@@ -252,177 +254,48 @@ static int rk29_aif1_hw_params(struct snd_pcm_substream *substream,
 			pll_out = 11289600;
 			break;
 		default:
-			DBG_AIC3262("Enter:%s, %d, Error rate=%d\n",__FUNCTION__,__LINE__,params_rate(params));
+			DBG("Enter:%s, %d, Error rate=%d\n",__FUNCTION__,__LINE__,params_rate(params));
 			return -EINVAL;
 	}
 
- 
-	div_bclk=(pll_out/4)/params_rate(params)-1;
-	div_mclk=3;
-	
-	DBG_AIC3262(" %s, pll_out=%d, div_bclk=%d, div_mclk=%d\n",__FUNCTION__,pll_out,div_bclk,div_mclk);
-	ret = snd_soc_dai_set_sysclk(cpu_dai, 0, pll_out, 0);
+	general_pll=clk_get(NULL, "general_pll");
+	if(clk_get_rate(general_pll)>260000000)
+	{//288m 
+		div_bclk=(pll_out/4)/params_rate(params)-1;
+		div_mclk=3;
+	}
+
+	DBG("func is%s,gpll=%ld,pll_out=%d,div_mclk=%d\n",__FUNCTION__,clk_get_rate(general_pll),pll_out,div_mclk);
+	ret = snd_soc_dai_set_sysclk(cpu_dai, 0, 12000000, 0);
 	if(ret < 0)
 	{
-		DBG_AIC3262("rk29_hw_params_aic3262:failed to set the cpu sysclk for codec side\n"); 
+		DBG("rk29_hw_params_aic3262:failed to set the cpu sysclk for codec side\n"); 
 		return ret;
 	}
-	snd_soc_dai_set_clkdiv(cpu_dai, ROCKCHIP_DIV_BCLK, div_bclk);
+	snd_soc_dai_set_clkdiv(cpu_dai, ROCKCHIP_DIV_BCLK,div_bclk);
 	snd_soc_dai_set_clkdiv(cpu_dai, ROCKCHIP_DIV_MCLK, div_mclk);
-	DBG_AIC3262("Enter:%s, %d, LRCK=%d\n",__FUNCTION__,__LINE__,(pll_out/4)/params_rate(params));
+	DBG("Enter:%s, %d, LRCK=%d\n",__FUNCTION__,__LINE__,(pll_out/4)/params_rate(params));
 
 	//MCLK == 11289600 or 12288000
-	ret = snd_soc_dai_set_sysclk(codec_dai, 0, pll_out, 0);
+	ret = snd_soc_dai_set_sysclk(codec_dai, 0, 12000000, 0);
 	if (ret < 0) {
-		DBG_AIC3262("rk29_hw_params_aic3262:failed to set the sysclk for codec side\n"); 
+		DBG("rk29_hw_params_aic3262:failed to set the sysclk for codec side\n"); 
 		return ret;
 	}
 	
-	return ret;
+	return 0;
 }
 
 static int rk29_aif2_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	unsigned int pll_out = 0; 
-	int div_bclk,div_mclk;
-	int ret;	
-
-	DBG("Enter:%s, %d, rate=%d\n",__FUNCTION__,__LINE__,params_rate(params));
-
-	/* set codec DAI configuration */
-	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_LEFT_J |
-			SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFM);
-	if (ret < 0)
-	{
-		printk("%s: snd_soc_dai_set_fmt err =%d\n",__FUNCTION__,ret);
-		return ret;
-	}
-	switch(params_rate(params)) {
-		case 8000:
-		case 16000:
-		case 24000:
-		case 32000:
-		case 48000:
-			pll_out = 12288000;
-			break;
-		case 11025:
-		case 22050:
-		case 44100:
-			pll_out = 11289600;
-			break;
-		default:
-			DBG("Enter:%s, %d, Error rate=%d\n",__FUNCTION__,__LINE__,params_rate(params));
-			return -EINVAL;
-	}
-		
-	div_bclk=(pll_out/4)/params_rate(params)-1;
-	div_mclk=3;
-	
-	DBG_AIC3262(" %s, pll_out=%d, div_bclk=%d, div_mclk=%d\n",__FUNCTION__,pll_out,div_bclk,div_mclk);
-	
-	ret = snd_soc_dai_set_sysclk(cpu_dai, 0, pll_out, 0);
-	if(ret < 0)
-	{
-		DBG("rk29_hw_params_aic3262:failed to set the cpu sysclk for codec side\n"); 
-		return ret;
-	}
-	snd_soc_dai_set_clkdiv(cpu_dai, ROCKCHIP_DIV_BCLK, div_bclk);
-	snd_soc_dai_set_clkdiv(cpu_dai, ROCKCHIP_DIV_MCLK, div_mclk);
-	DBG("Enter:%s, %d, LRCK=%d\n",__FUNCTION__,__LINE__,(pll_out/4)/params_rate(params));
-
-	/* set the codec system clock */
-	ret = snd_soc_dai_set_sysclk(codec_dai, 0, pll_out, 0);
-	if (ret < 0)
-	{
-		printk("%s: snd_soc_dai_set_sysclk err =%d\n",__FUNCTION__,ret);
-		return ret;
-	}
-
-	/* set the codec FLL */
-	ret = snd_soc_dai_set_pll(codec_dai, 0, AIC3262_PLL_CLKIN_MCLK1 , pll_out, 8000*256);
-	if (ret < 0)
-	{
-		printk("%s: snd_soc_dai_set_pll err =%d\n",__FUNCTION__,ret);
-		return ret;
-	}
-
-	return ret;
+	return 0;
 }
 
 static int rk29_aif3_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	unsigned int pll_out = 0; 
-	int div_bclk,div_mclk;
-	int ret;	
-
-	DBG("Enter:%s, %d, rate=%d\n",__FUNCTION__,__LINE__,params_rate(params));
-
-	/* set codec DAI configuration */
-	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_LEFT_J |
-			SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFM);
-	if (ret < 0)
-	{
-		printk("%s: snd_soc_dai_set_fmt err =%d\n",__FUNCTION__,ret);
-		return ret;
-	}
-	switch(params_rate(params)) {
-		case 8000:
-		case 16000:
-		case 24000:
-		case 32000:
-		case 48000:
-			pll_out = 12288000;
-			break;
-		case 11025:
-		case 22050:
-		case 44100:
-			pll_out = 11289600;
-			break;
-		default:
-			DBG("Enter:%s, %d, Error rate=%d\n",__FUNCTION__,__LINE__,params_rate(params));
-			return -EINVAL;
-	}
-		
-	div_bclk=(pll_out/4)/params_rate(params)-1;
-	div_mclk=3;
-	
-	DBG_AIC3262(" %s, pll_out=%d, div_bclk=%d, div_mclk=%d\n",__FUNCTION__,pll_out,div_bclk,div_mclk);
-	
-	ret = snd_soc_dai_set_sysclk(cpu_dai, 0, pll_out, 0);
-	if(ret < 0)
-	{
-		DBG("rk29_hw_params_aic3262:failed to set the cpu sysclk for codec side\n"); 
-		return ret;
-	}
-	snd_soc_dai_set_clkdiv(cpu_dai, ROCKCHIP_DIV_BCLK, div_bclk);
-	snd_soc_dai_set_clkdiv(cpu_dai, ROCKCHIP_DIV_MCLK, div_mclk);
-	DBG("Enter:%s, %d, LRCK=%d\n",__FUNCTION__,__LINE__,(pll_out/4)/params_rate(params));
-
-	/* set the codec system clock */
-	ret = snd_soc_dai_set_sysclk(codec_dai, 0, pll_out, 0);
-	if (ret < 0)
-	{
-		printk("%s: snd_soc_dai_set_sysclk err =%d\n",__FUNCTION__,ret);
-		return ret;
-	}
-
-	/* set the codec FLL */
-	ret = snd_soc_dai_set_pll(codec_dai, 0, AIC3262_PLL_CLKIN_MCLK1 , pll_out, 8000*256);
-	if (ret < 0)
-	{
-		printk("%s: snd_soc_dai_set_pll err =%d\n",__FUNCTION__,ret);
-		return ret;
-	}
-
-	return ret;
+	return 0;
 }
 
 static struct snd_soc_ops rk29_aif1_ops = {
@@ -504,7 +377,7 @@ static int __init audio_card_init(void)
 {
 	int ret =0;
 
-	DBG_AIC3262("Enter::%s----%d\n",__FUNCTION__,__LINE__);
+	DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
 
 	rk29_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!rk29_snd_device) {

@@ -1479,7 +1479,7 @@ static int32_t handle_hc_babble_intr(dwc_otg_hcd_t *_hcd,
 {
 	DWC_DEBUGPL(DBG_HCD, "--Host Channel %d Interrupt: "
 		    "Babble Error--\n", _hc->hc_num);
-    DWC_PRINT("%s \n", __func__);
+    //DWC_PRINT("%s \n", __func__);
 	if (_hc->ep_type != DWC_OTG_EP_TYPE_ISOC) {
 		dwc_otg_hcd_complete_urb(_hcd, _qtd->urb, -EOVERFLOW);
 		halt_channel(_hcd, _hc, _qtd, DWC_OTG_HC_XFER_BABBLE_ERR);

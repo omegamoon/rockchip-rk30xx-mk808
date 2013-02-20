@@ -7,12 +7,9 @@ config FB_ROCKCHIP
         ---help---
           Framebuffer driver for rockchip based platform
 
-config FB_WIMO
-	bool "WiMO support"
+config FB_MIRRORING
+	bool     "Mirroring support"
 	depends on FB_ROCKCHIP
-	default n
-	help
-	    Support wimo
 
 config LCDC_RK30
         tristate "rk30 lcdc support "

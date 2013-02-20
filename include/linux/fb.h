@@ -55,6 +55,9 @@
 #define FBIOGET_IDLEFBUff_16OR32    0X4622
 #define FBIOSET_COMPOSE_LAYER_COUNTS    0X4623
 #define FBIOGET_COMPOSE_LAYER_COUNTS    0X4624
+#if  defined(CONFIG_MACH_RK29_ITV_HOTDOG) || defined(CONFIG_MACH_RK29_ITV)
+#define FBIOPUT_SET_SCALE_RATE 0x4625
+#endif
 
 #define FB_TYPE_PACKED_PIXELS		0	/* Packed Pixels	*/
 #define FB_TYPE_PLANES			1	/* Non interleaved planes */

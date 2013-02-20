@@ -1111,9 +1111,9 @@ config RTC_DRV_PUV3
 	  This drive can also be built as a module. If so, the module
 	  will be called rtc-puv3.
 config  TPS65910_RTC
-	tristate "tps65910 rtc for rk30"
-	depends on TPS65910_RK30
+	tristate "tps65910 rtc for rk"
+	depends on MFD_TPS65910
 	help
-		enable tps65910 rtc for system of 3066 sdk
+		enable tps65910 rtc for system
 
 endif # RTC_CLASS

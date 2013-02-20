@@ -23,8 +23,11 @@
 #define CHANNEL_2_EN            (1<<15)
 #define CHANNEL_3_EN            (2<<15)
 #define CHANNLE_4_EN            (3<<15)
+
 #define TX_MODE_MASTER          (0<<13)
 #define TX_MODE_SLAVE           (1<<13)
+
+
 #define RESET_TX                (1<<17)
 #define RESET_RX                (1<<16)
 #define I2S_DMA_REQ1_DISABLE    (1<<6)
@@ -243,6 +246,6 @@ extern struct snd_soc_dai_driver rk29_i2s_dai[];
 #else
 extern struct snd_soc_dai rk29_i2s_dai[];
 #endif
-
+//extern void rockchip_add_device_i2s(void);
 #endif /* _ROCKCHIP_IIS_H */
 

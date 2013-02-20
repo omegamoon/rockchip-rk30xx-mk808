@@ -1,7 +1,16 @@
 #ifndef __MACH_IO_H
 #define __MACH_IO_H
 
-#include <plat/io.h>
+#define IO_SPACE_LIMIT	0xffffffff
+
+#define __io(a)		__typesafe_io(a)
+#define __mem_pci(a)	(a)
+
+#ifdef __ASSEMBLER__
+#define IOMEM(x)	(x)
+#else
+#define IOMEM(x)	((void __force __iomem *)(x))
+#endif
 
 /*
  * RK30 IO memory map:
@@ -155,6 +164,7 @@
 #define RK30_I2C0_PHYS          0x2002c000
 #define RK30_I2C0_SIZE          SZ_8K
 #define RK30_I2C1_PHYS          0x2002e000
+#define RK30_I2C1_BASE         RK30_IO_TO_VIRT1(RK30_I2C1_PHYS)
 #define RK30_I2C1_SIZE          SZ_8K
 #define RK30_PWM01_PHYS         0x20030000
 #define RK30_PWM01_BASE         RK30_IO_TO_VIRT1(RK30_PWM01_PHYS)

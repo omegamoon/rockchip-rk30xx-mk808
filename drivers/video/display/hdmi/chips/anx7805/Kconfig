@@ -1,0 +1,7 @@
+config SP_TX
+	tristate "Analogix Slimport transmitter ANX7805 support"
+	help
+        	Slimport Transmitter (SP_TX) is a HD video transmitter chip 
+		over micro-USB connector for smartphone device.
+
+       

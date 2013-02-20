@@ -1,6 +1,7 @@
-config RK610_LCD
-	bool "RK610(Jetta) lcd support"
-	depends on MFD_RK610
-	default y if MFD_RK610
-	help
-		Support Jetta(RK610) to output LCD1 and LVDS.
+#
+# LCD drivers configuration
+#
+
+config DISPLAY_LCD_SUPPORT
+	bool "LCD Screen support"
+	depends on DISPLAY_SUPPORT

@@ -345,8 +345,8 @@ static int hdmi_edid_parse_extensions(unsigned char *buf, struct hdmi_edid *pedi
     		hdmi_edid_debug("[EDID-EXTEND] It is a Digital Packet Video Link Extension.\n");
     		break;
     	default:
-    		hdmi_edid_debug("[EDID-EXTEND] Unkowned extension.\n");
-    		break;
+    		hdmi_edid_error("[EDID-EXTEND] Unkowned extension.\n");
+    		return E_HDMI_EDID_UNKOWNDATA;
     }
     
     return E_HDMI_EDID_SUCCESS;
@@ -363,6 +363,7 @@ int hdmi_sys_parse_edid(struct hdmi* hdmi)
 		return HDMI_ERROR_FALSE;
 
 	pedid = &(hdmi->edid);
+	fb_destroy_modelist(&pedid->modelist);
 	memset(pedid, 0, sizeof(struct hdmi_edid));
 	INIT_LIST_HEAD(&pedid->modelist);
 	

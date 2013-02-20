@@ -1,0 +1,10 @@
+toolchain/build.git              89f41cc2452f2c3ab645a35db0aa5bf6cba0795d Disable python support for gdb-7.x
+toolchain/gmp.git                e6b9669dafc6a5f83c80b4b4176359b78bccdc90 Add gmp-5.0.5.tar.bz2
+toolchain/mpfr.git               bde731396c38c8d5b0bca800aace6a690d0d2978 add mpfr-2.4.2.tar.bz2
+toolchain/mpc.git                a4109ccc6e07f72f41c397a17fdfbed3e5e19c66 Add mpc-0.8.1 package to toolchain source.
+toolchain/expat.git              40172a0ae9d40a068f1e1a48ffcf6a1ccf765ed5 expat package for building gdb-7.3
+toolchain/binutils.git           2e216c77403ccdb1c5604f4ceb9ceb8e9f2bb2d3 Merge "[2.22] Fix various issues due to extra warnings"
+toolchain/gcc.git                20c5bf758150dcfc13af1fce22e20256d29e150a Merge "[4.7] Add -fuse-ld="
+toolchain/gdb.git                feb8dd137d0791e9e049f3e694a4da8a106285dd Fix gdb-7.3 build with gcc-4.7
+toolchain/clang.git              0089e332fb3c6fa3654d514c96e943f21ab431d2 Check -march and -mthumb for ARM multi-arch suffix.
+toolchain/llvm.git               9c463c361a62b76e1c752b068cf2cff60cc3c105 Use __stack_chk_guard as the cookie on Android X86

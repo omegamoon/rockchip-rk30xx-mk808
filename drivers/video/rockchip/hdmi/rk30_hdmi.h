@@ -26,7 +26,11 @@ enum {
 };
 
 /* default HDMI video source */
+#if defined(CONFIG_LCDC0_RK30) && defined(CONFIG_LCDC1_RK30)
 #define HDMI_SOURCE_DEFAULT		HDMI_SOURCE_LCDC1
+#else
+#define HDMI_SOURCE_DEFAULT		HDMI_SOURCE_LCDC0
+#endif
 
 /* If HDMI_ENABLE, system will auto configure output mode according to EDID 
  * If HDMI_DISABLE, system will output mode according to macro HDMI_VIDEO_DEFAULT_MODE
@@ -48,7 +52,7 @@ struct hdmi {
 	int				regbase_phy;
 	int				regsize_phy;
 	struct rk_lcdc_device_driver *lcdc;
-	
+	struct rk_display_device *ddev;
 	#ifdef CONFIG_SWITCH
 	struct switch_dev	switch_hdmi;
 	#endif
@@ -101,6 +105,7 @@ extern int hdmi_find_best_mode(struct hdmi* hdmi, int vic);
 extern int hdmi_ouputmode_select(struct hdmi *hdmi, int edid_ok);
 extern int hdmi_switch_fb(struct hdmi *hdmi, int vic);
 extern void hdmi_sys_remove(void);
+extern void hdmi_init_modelist(struct hdmi *hdmi);
 extern int rk30_hdmi_register_hdcp_callbacks(void (*hdcp_cb)(void),
 					 void (*hdcp_irq_cb)(int status),
 					 int  (*hdcp_power_on_cb)(void),

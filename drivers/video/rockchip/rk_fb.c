@@ -34,11 +34,11 @@
 
 
 
-#ifdef	FB_WIMO_FLAG
+#ifdef	CONFIG_FB_MIRRORING
 
 
-int (*video_data_to_wimo)(struct fb_info *info,u32 yuv_phy[2]) = NULL;
-EXPORT_SYMBOL(video_data_to_wimo);
+int (*video_data_to_mirroring)(struct fb_info *info,u32 yuv_phy[2]) = NULL;
+EXPORT_SYMBOL(video_data_to_mirroring);
 
 #endif
 static struct platform_device *g_fb_pdev;
@@ -81,6 +81,7 @@ int get_fb_layer_id(struct fb_fix_screeninfo *fix)
 
 	return layer_id;
 }
+EXPORT_SYMBOL(get_fb_layer_id);
 
 /**********************************************************************
 this is for hdmi
@@ -227,7 +228,9 @@ static int rk_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 					par2->y_offset = par->y_offset;
 					//memcpy(info2->screen_base+par2->y_offset,info->screen_base+par->y_offset,
 					//	var->xres*var->yres*var->bits_per_pixel>>3);
+					#if !defined(CONFIG_THREE_FB_BUFFER)
 					fb_copy_by_ipp(info2,info,par->y_offset);
+					#endif
 					dev_drv1->pan_display(dev_drv1,layer_id);
 					//queue_delayed_work(inf->workqueue, &inf->delay_work,0);
 				}
@@ -235,9 +238,9 @@ static int rk_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 		#endif
 	#endif
 	dev_drv->pan_display(dev_drv,layer_id);
-	#ifdef	FB_WIMO_FLAG
-	if(video_data_to_wimo!=NULL)
-		video_data_to_wimo(info,NULL);
+	#ifdef	CONFIG_FB_MIRRORING
+	if(video_data_to_mirroring!=NULL)
+		video_data_to_mirroring(info,NULL);
  	#endif
 	return 0;
 }
@@ -251,6 +254,12 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 	int ovl;	//overlay:0 win1 on the top of win0;1,win0 on the top of win1
 	int num_buf; //buffer_number
 	void __user *argp = (void __user *)arg;
+
+	#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
+	struct rk_fb_inf *inf = dev_get_drvdata(info->device);
+	struct fb_info * info2 = inf->fb[2];
+	struct rk_lcdc_device_driver * dev_drv1  = (struct rk_lcdc_device_driver * )info2->par;
+	#endif
 	
 	switch(cmd)
 	{
@@ -289,6 +298,9 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 			if (copy_from_user(&num_buf, argp, sizeof(num_buf)))
 				return -EFAULT;
 			dev_drv->num_buf = num_buf;
+			#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
+			dev_drv1->num_buf = num_buf;
+			#endif
 			break;
 		case FBIOGET_SCREEN_STATE:
 		case FBIOPUT_SET_CURSOR_EN:
@@ -304,6 +316,9 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 		case FBIOSET_COMPOSE_LAYER_COUNTS:
         	default:
 			dev_drv->ioctl(dev_drv,cmd,arg,layer_id);
+			#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
+			dev_drv1->ioctl(dev_drv1,cmd,arg,layer_id);
+			#endif
             break;
     }
     return 0;
@@ -374,8 +389,7 @@ static int rk_fb_set_par(struct fb_info *info)
 	u32 xvir = var->xres_virtual;
 	u32 yvir = var->yres_virtual;
 	u8 data_format = var->nonstd&0xff;
-	var->pixclock = dev_drv->pixclock;
-	
+//	var->pixclock = dev_drv->pixclock;
 	#if defined(CONFIG_HDMI_RK30)
 		#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
 			if(hdmi_get_hotplug() == HDMI_HPD_ACTIVED)
@@ -455,7 +469,7 @@ static int rk_fb_set_par(struct fb_info *info)
 			cblen = crlen = (xvir*yvir);
 			break;
 		default:
-			printk("un supported format:0x%x\n",data_format);
+			printk("%s:un supported format:0x%x\n",__func__,data_format);
 		    return -EINVAL;
 	}
 #else
@@ -496,8 +510,27 @@ static int rk_fb_set_par(struct fb_info *info)
 					par2->xact = par->xact;
 					par2->yact = par->yact;
 					par2->format = par->format;
+					if(par2->xsize == 0)
+						par2->xsize = par->xsize;
+					if(par2->ysize == 0)
+						par2->ysize = par->ysize;
+					if(par2->xvir == 0)
+						par2->xvir = par->xvir;
+					if(par2->yvir == 0)
+						par2->yvir = par->yvir;
 					dev_drv1->set_par(dev_drv1,layer_id);
 				}
+				//$_rbox_$_modify_$ zhy modified for box display system
+				else
+				{
+					struct fb_info * info0 = inf->fb[0]; 
+					struct rk_lcdc_device_driver * dev_drv0  = (struct rk_lcdc_device_driver * )info0->par;
+					struct layer_par *par0 = dev_drv0->layer_par[layer_id];
+					par->format = par0->format;
+					par->xact = par0->xact;
+					par->yact = par0->yact;
+				}
+				//$_rbox_$_modify_end
 			}
 		#endif
 	#endif
@@ -600,21 +633,18 @@ void rk_direct_fb_show(struct fb_info * fbi)
 }
 EXPORT_SYMBOL(rk_direct_fb_show);
 
-
+//$_rbox_$_modify_$ zhengyang_20120618
 int rk_fb_switch_screen(rk_screen *screen ,int enable ,int lcdc_id)
 {
 	struct rk_fb_inf *inf =  platform_get_drvdata(g_fb_pdev);
 	struct fb_info *info = NULL;
-	struct fb_info *pmy_info = NULL;
 	struct rk_lcdc_device_driver * dev_drv = NULL;
-	struct fb_var_screeninfo *pmy_var = NULL;      //var for primary screen
-	struct fb_var_screeninfo *hdmi_var    = NULL;
-	struct fb_fix_screeninfo *pmy_fix = NULL;
-	struct fb_fix_screeninfo *hdmi_fix    = NULL;
+	struct fb_var_screeninfo *var = NULL;
+	struct fb_fix_screeninfo *fix = NULL;
 	char name[6];
-	int ret;
-	int i;
-	int layer_id;
+	int ret, i, layer_id;
+	u16 xpos, ypos, xsize, ysize;
+	
 	sprintf(name, "lcdc%d",lcdc_id);
 	for(i = 0; i < inf->num_lcdc; i++)
 	{
@@ -631,7 +661,10 @@ int rk_fb_switch_screen(rk_screen *screen ,int enable ,int lcdc_id)
 		return -ENODEV;
 		
 	}
-
+	//$_rbox_$_modify_$ zhengyang_20120618
+	if(enable)
+		memcpy(dev_drv->screen, screen, sizeof(rk_screen));
+	//$_rbox_$_modify_$ end
 	
 	if((lcdc_id == 0) || (inf->num_lcdc == 1))
 	{
@@ -652,45 +685,25 @@ int rk_fb_switch_screen(rk_screen *screen ,int enable ,int lcdc_id)
 		return 0;
 	}
 	
-	hdmi_var = &info->var;
-	hdmi_fix = &info->fix;
-	#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
-		if(likely(inf->num_lcdc == 2))
-		{
-			pmy_var = &inf->fb[0]->var;
-			pmy_fix = &inf->fb[0]->fix;
-			hdmi_var->xres = pmy_var->xres;
-			hdmi_var->yres = pmy_var->yres;
-			hdmi_var->xres_virtual = pmy_var->xres_virtual;
-			hdmi_var->yres_virtual = pmy_var->yres_virtual;
-			hdmi_var->nonstd &= 0xffffff00;
-			hdmi_var->nonstd |= (pmy_var->nonstd & 0xff); //use the same format as primary screen
-		}
-		else
-		{
-			printk(KERN_WARNING "%s>>only one lcdc,dual display no supported!",__func__);
-		}
-	#endif
-	hdmi_var->grayscale &= 0xff;
-	hdmi_var->grayscale |= (dev_drv->screen->x_res<<8) + (dev_drv->screen->y_res<<20);
-	ret = info->fbops->fb_open(info,1);
+	xpos = (dev_drv->screen->x_res - dev_drv->screen->x_res*dev_drv->x_scale/100)>>1;
+	ypos = (dev_drv->screen->y_res - dev_drv->screen->y_res*dev_drv->y_scale/100)>>1;
+	xsize = dev_drv->screen->x_res * dev_drv->x_scale/100;
+	ysize = dev_drv->screen->y_res * dev_drv->y_scale/100;
+	
+	var = &info->var;
+	var->nonstd &= 0xff;
+	var->nonstd |= (xpos << 8) + (ypos << 20);
+	var->grayscale &= 0xff;
+	var->grayscale |= (xsize << 8) + (ysize << 20);
 	ret = dev_drv->load_screen(dev_drv,1);
+	if(dev_drv->layer_par[layer_id]->state != enable)
+		ret = info->fbops->fb_open(info,1);
 	ret = info->fbops->fb_set_par(info);
-	#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
-		if(likely(inf->num_lcdc == 2))
-		{
-			pmy_info = inf->fb[0];
-			pmy_info->fbops->fb_pan_display(pmy_var,pmy_info);
-		}
-		else
-		{
-			printk(KERN_WARNING "%s>>only one lcdc,dual display no supported!",__func__);
-		}
-	#endif 
-
+	ret = info->fbops->fb_pan_display(var, info);
 	return 0;
 
 }
+//$_rbox_$_modify_$ end
 
 int rk_fb_disp_scale(u8 scale_x, u8 scale_y,u8 lcdc_id)
 {
@@ -753,6 +766,7 @@ static int rk_request_fb_buffer(struct fb_info *fbi,int fb_id)
 	struct resource *res;
 	struct resource *mem;
 	int ret = 0;
+	struct rk_fb_inf *fb_inf = platform_get_drvdata(g_fb_pdev);
 	switch(fb_id)
 	{
         	case 0:
@@ -781,6 +795,7 @@ static int rk_request_fb_buffer(struct fb_info *fbi,int fb_id)
 	 	#endif
 		    	break;
         	case 2:
+			#if !defined(CONFIG_THREE_FB_BUFFER)
             		res = platform_get_resource_byname(g_fb_pdev, IORESOURCE_MEM, "fb2 buf");
 			if (res == NULL)
 			{
@@ -792,6 +807,11 @@ static int rk_request_fb_buffer(struct fb_info *fbi,int fb_id)
 			mem = request_mem_region(res->start, resource_size(res), g_fb_pdev->name);
 			fbi->screen_base = ioremap(res->start, fbi->fix.smem_len);
 			memset(fbi->screen_base, 0, fbi->fix.smem_len);
+			#else    //three buffer no need to copy
+			fbi->fix.smem_start = fb_inf->fb[0]->fix.smem_start;
+			fbi->fix.smem_len   = fb_inf->fb[0]->fix.smem_len;
+			fbi->screen_base    = fb_inf->fb[0]->screen_base;
+			#endif
 			printk("fb%d:phy:%lx>>vir:%p>>len:0x%x\n",fb_id,
 				fbi->fix.smem_start,fbi->screen_base,fbi->fix.smem_len);
 			break;
@@ -874,6 +894,14 @@ static int init_lcdc_device_driver(struct rk_lcdc_device_driver *dev_drv,
 	dev_drv->get_disp_info  = def_drv->get_disp_info;
 	dev_drv->ovl_mgr	= def_drv->ovl_mgr;
 	dev_drv->fps_mgr	= def_drv->fps_mgr;
+	//$_rbox_$_modify_$ zhy added for lut modify
+	if(def_drv->set_dsp_lut)
+		dev_drv->set_dsp_lut    = def_drv->set_dsp_lut;
+	if(def_drv->read_dsp_lut)
+		dev_drv->read_dsp_lut   = def_drv->read_dsp_lut;
+	dev_drv->x_scale = 100;
+	dev_drv->y_scale = 100;
+	//$_rbox_$_modify_end
 	init_layer_par(dev_drv);
 	init_completion(&dev_drv->frame_done);
 	spin_lock_init(&dev_drv->cpl_lock);
@@ -1019,7 +1047,7 @@ int rk_fb_unregister(struct rk_lcdc_device_driver *dev_drv)
 	{
 		fbi = fb_inf->fb[i];
 		unregister_framebuffer(fbi);
-		rk_release_fb_buffer(fbi);
+		//rk_release_fb_buffer(fbi);
 		framebuffer_release(fbi);	
 	}
 	fb_inf->lcdc_dev_drv[dev_drv->id]= NULL;
@@ -1096,12 +1124,12 @@ static int __devinit rk_fb_probe (struct platform_device *pdev)
         	ret = -ENOMEM;
     	}
 	platform_set_drvdata(pdev,fb_inf);
-#if defined(CONFIG_HDMI_RK30)
-		#if defined(CONFIG_DUAL_DISP_IN_KERNEL)		
-			fb_inf->workqueue = create_singlethread_workqueue("hdmi_post");
-			INIT_DELAYED_WORK(&(fb_inf->delay_work), hdmi_post_work);
-		#endif
-#endif
+//#if defined(CONFIG_HDMI_RK30)
+//		#if defined(CONFIG_DUAL_DISP_IN_KERNEL)		
+//			fb_inf->workqueue = create_singlethread_workqueue("hdmi_post");
+//			INIT_DELAYED_WORK(&(fb_inf->delay_work), hdmi_post_work);
+//		#endif
+//#endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	suspend_info.inf = fb_inf;

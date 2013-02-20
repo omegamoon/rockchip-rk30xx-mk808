@@ -188,6 +188,114 @@ static ssize_t set_fps(struct device *dev,struct device_attribute *attr,
 	return count;
 }
 
+static ssize_t show_scale(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct rk_lcdc_device_driver * dev_drv = 
+		(struct rk_lcdc_device_driver * )fbi->par;
+	return snprintf(buf, PAGE_SIZE, "xscale=%d yscale=%d\n", dev_drv->x_scale, dev_drv->y_scale);
+}
+
+static ssize_t set_scale(struct device *dev,struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct rk_lcdc_device_driver * dev_drv = (struct rk_lcdc_device_driver * )fbi->par;
+	struct fb_var_screeninfo *var = NULL;
+	u16 xpos, ypos, xsize, ysize;
+	u32 scale;
+	
+	if(!strncmp(buf, "xscale", 6)) {
+		sscanf(buf, "xscale=%d", &scale);
+		if(scale >= 0 && scale <= 100)
+			dev_drv->x_scale = scale;
+	}
+	else if(!strncmp(buf, "yscale", 6)) {
+		sscanf(buf, "yscale=%d", &scale);
+		if(scale >= 0 && scale <= 100)
+			dev_drv->y_scale = scale;
+	}
+	else {
+		sscanf(buf, "%d", &scale);
+		if(scale >= 0 && scale <= 100) {
+			dev_drv->x_scale = scale;
+			dev_drv->y_scale = scale;
+		}
+	}
+//	printk("scale rate x %d y %d\n", dev_drv->x_scale, dev_drv->y_scale);
+	
+	var = &fbi->var;
+	xpos = (dev_drv->screen->x_res - dev_drv->screen->x_res*dev_drv->x_scale/100)>>1;
+	ypos = (dev_drv->screen->y_res - dev_drv->screen->y_res*dev_drv->y_scale/100)>>1;
+	xsize = dev_drv->screen->x_res * dev_drv->x_scale/100;
+	ysize = dev_drv->screen->y_res * dev_drv->y_scale/100;
+//	printk("var->nonstd is %02x\n", var->nonstd);
+	var->nonstd &= 0xff;
+	var->nonstd |= (xpos << 8) + (ypos << 20);
+//	printk("var->nonstd is %02x\n", var->nonstd);
+	var->grayscale &= 0xff;
+	var->grayscale |= (xsize << 8) + (ysize << 20);
+
+	fbi->fbops->fb_set_par(fbi);
+	return count;
+}
+
+
+static ssize_t show_dsp_lut(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	
+}
+static ssize_t set_dsp_lut(struct device *dev,struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	int dsp_lut[256];
+	char *start = buf;
+	int i=256,j,temp;
+	int space_max = 10;
+
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct rk_lcdc_device_driver * dev_drv = 
+		(struct rk_lcdc_device_driver * )fbi->par;
+	#if defined(CONFIG_HDMI_RK30) && defined(CONFIG_DUAL_DISP_IN_KERNEL)
+	struct rk_fb_inf *inf = dev_get_drvdata(fbi->device);
+	struct fb_info * info2 = inf->fb[2]; 
+	struct rk_lcdc_device_driver *dev_drv1 = (struct rk_lcdc_device_driver * )info2->par;
+	#endif
+	for(i=0;i<256;i++)
+	{
+		temp = i;
+		dsp_lut[i] = temp + (temp<<8) + (temp<<16);  //init by default value
+	}
+//	printk("count:%d\n>>%s\n\n",count,start);
+	for(i=0;i<256;i++)
+	{
+		space_max = 10;  //max space number 10;
+		temp = simple_strtoul(start,NULL,10);
+		dsp_lut[i] = temp;
+		do
+		{
+			start++;
+			space_max--;
+		}while ((*start != ' ')&&space_max);
+		
+		if(!space_max)
+			break;
+		else
+			start++;
+	}
+
+	dev_drv->set_dsp_lut(dev_drv,dsp_lut);
+	#if defined(CONFIG_HDMI_RK30) && defined(CONFIG_DUAL_DISP_IN_KERNEL)
+	dev_drv1->set_dsp_lut(dev_drv1,dsp_lut);
+	#endif
+	return count;
+	
+}
+
+//$_rbox_$_modify_end
+
 static struct device_attribute rkfb_attrs[] = {
 	__ATTR(phys_addr, S_IRUGO, show_phys, NULL),
 	__ATTR(virt_addr, S_IRUGO, show_virt, NULL),
@@ -196,6 +304,9 @@ static struct device_attribute rkfb_attrs[] = {
 	__ATTR(enable, S_IRUGO | S_IWUSR, show_fb_state, set_fb_state),
 	__ATTR(overlay, S_IRUGO | S_IWUSR, show_overlay, set_overlay),
 	__ATTR(fps, S_IRUGO | S_IWUSR, show_fps, set_fps),
+	__ATTR(scale, S_IRUGO | S_IWUSR, show_scale, set_scale),
+	__ATTR(dsp_lut, /*S_IRUGO | S_IWUSR*/0664, show_dsp_lut, set_dsp_lut),
+//$_rbox_$_modify_end
 };
 
 int rkfb_create_sysfs(struct fb_info *fbi)

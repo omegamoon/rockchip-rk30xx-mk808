@@ -397,11 +397,7 @@ config SND_SOC_WM9713
 
 config SND_SOC_RK1000
 	tristate
-#	depends on RK1000_CONTROL
-
-config SND_SOC_RK610
-	tristate
-	depends on MFD_RK610
+	depends on MFD_RK1000
 
 # Amp
 config SND_SOC_LM4857
@@ -418,3 +414,11 @@ config SND_SOC_WM2000
 
 config SND_SOC_WM9090
 	tristate
+	
+config SND_SOC_RK610
+	tristate
+	depends on MFD_RK610
+##$_rbox_$_modify_$_begin_$_zhy_$_20120704
+config SND_SOC_RK_HDMI_CODEC
+	tristate
+##$_rbox_$_modify_$_end_$_zhy_$_20120704

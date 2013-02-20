@@ -182,7 +182,10 @@ int wm831x_post_init(struct wm831x *Wm831x)
 	struct regulator *dcdc;
 	struct regulator *ldo;
 
-
+	
+	g_pmic_type = PMIC_TYPE_WM8326;
+	printk("%s:g_pmic_type=%d\n",__func__,g_pmic_type);
+	
 	ldo = regulator_get(NULL, "ldo6");	//vcc_33
 	regulator_set_voltage(ldo, 3300000, 3300000);
 	regulator_set_suspend_voltage(ldo, 3300000);
@@ -257,23 +260,20 @@ int wm831x_post_init(struct wm831x *Wm831x)
 //	printk("%s set ldo7 vcc28_cif=%dmV end\n", __func__, regulator_get_voltage(ldo));
 	regulator_put(ldo);
 	udelay(100);
-#if 0
+
 	ldo = regulator_get(NULL, "ldo1");	// vcc18_cif
+/*
+	// Omegamoon >> Experiment with lower voltage here
+ 	regulator_set_voltage(ldo, 1500000, 1500000);
+ 	regulator_set_suspend_voltage(ldo, 1500000);
+*/
 	regulator_set_voltage(ldo, 1800000, 1800000);
 	regulator_set_suspend_voltage(ldo, 1800000);
 	regulator_enable(ldo);
 //	printk("%s set ldo1 vcc18_cif=%dmV end\n", __func__, regulator_get_voltage(ldo));
 	regulator_put(ldo);
 	udelay(100);
-#else
-	 ldo = regulator_get(NULL, "ldo1"); // vcc18_cif
- 	regulator_set_voltage(ldo, 1500000, 1500000);
- 	regulator_set_suspend_voltage(ldo, 1500000);
- 	regulator_enable(ldo);
- 	printk("%s set ldo1 vcc18_cif=%dmV end\n", __func__, regulator_get_voltage(ldo));
- 	regulator_put(ldo);
- 	udelay(100);
-#endif
+
 	ldo = regulator_get(NULL, "ldo8");	// vcca_33
 	regulator_set_voltage(ldo, 3300000, 3300000);
 	regulator_set_suspend_voltage(ldo, 3300000);
@@ -782,14 +782,19 @@ out:
 	return 0;
 }
 
-void __sramfunc board_pmu_suspend(void)
+void __sramfunc board_pmu_wm8326_suspend(void)
 {	
-	cru_writel(CRU_CLKGATE5_GRFCLK_ON,CRU_CLKGATE5_CON_ADDR); //open grf clk
+	
+#ifdef CONFIG_DWC_REMOTE_WAKEUP		
+	  cru_writel(CRU_CLKGATE5_GRFCLK_ON|0x60000000,CRU_CLKGATE5_CON_ADDR); //open grf clk
+#else
+    cru_writel(CRU_CLKGATE5_GRFCLK_ON,CRU_CLKGATE5_CON_ADDR); //open grf clk
 	grf_writel(GPIO6_PB1_DIR_OUT, GRF_GPIO6L_DIR_ADDR);
 	grf_writel(GPIO6_PB1_DO_HIGH, GRF_GPIO6L_DO_ADDR);  //set gpio6_b1 output low
 	grf_writel(GPIO6_PB1_EN_MASK, GRF_GPIO6L_EN_ADDR);
+#endif	
 }
-void __sramfunc board_pmu_resume(void)
+void __sramfunc board_pmu_wm8326_resume(void)
 {
 	grf_writel(GPIO6_PB1_DIR_OUT, GRF_GPIO6L_DIR_ADDR);
 	grf_writel(GPIO6_PB1_DO_LOW, GRF_GPIO6L_DO_ADDR);     //set gpio6_b1 output high

@@ -53,6 +53,8 @@
 #include <mach/board.h>
 
 #include "rk29_vmac.h"
+#include "../staging/rk29/eeprom/eeprom_at24c16.h"
+#include "eth_mac/eth_mac.h"
 
 static struct wake_lock idlelock; /* add by lyx @ 20110302 */
 
@@ -136,6 +138,8 @@ static void vmac_handle_link_change(struct net_device *dev)
 	struct phy_device *phydev = ap->phy_dev;
 	unsigned long flags;
 	int report_change = 0;
+//$_rbox_$_modify_$_chenzhi_20120523: switch speed between 10M and 100M
+	struct rk29_vmac_platform_data *pdata = ap->pdev->dev.platform_data;
 
 	spin_lock_irqsave(&ap->lock, flags);
 
@@ -159,6 +163,12 @@ static void vmac_handle_link_change(struct net_device *dev)
 		ap->speed = phydev->speed;
 		report_change = 1;
 	}
+
+//$_rbox_$_modify_$_chenzhi_20120523: switch speed between 10M and 100M
+//$_rbox_$_modify_$_begin
+	if (pdata && pdata->rmii_speed_switch)
+		pdata->rmii_speed_switch(phydev->speed);
+//$_rbox_$_modify_$_end
 
 	if (phydev->link != ap->link) {
 		ap->link = phydev->link;
@@ -1032,6 +1042,8 @@ int vmac_open(struct net_device *dev)
 	struct clk *mac_parent = NULL;
 	struct clk *arm_clk = NULL;
 	struct rk29_vmac_platform_data *pdata = ap->pdev->dev.platform_data;
+	unsigned char current_mac[6];
+	int ret = 0;
 
 	printk("enter func %s...\n", __func__);
 
@@ -1071,6 +1083,64 @@ int vmac_open(struct net_device *dev)
 	msleep(1000);
 
 	vmac_hw_init(dev);
+
+//add by cx@rock-chips.com
+
+	if (is_valid_ether_addr(dev->dev_addr)){
+		strlcpy(current_mac,dev->dev_addr,6);
+	}
+
+#ifdef CONFIG_ETH_MAC_FROM_EEPROM
+	ret = eeprom_read_data(0,dev->dev_addr,6);
+	if (ret != 6){
+		printk("read mac from Eeprom fail.\n");
+	}else {
+		if (is_valid_ether_addr(dev->dev_addr)){
+			printk("eth_mac_from_eeprom***********:%X:%X:%X:%X:%X:%X\n",dev->dev_addr[0],
+						dev->dev_addr[1],dev->dev_addr[2],dev->dev_addr[3],
+						dev->dev_addr[4],dev->dev_addr[5] );
+		}
+	}
+#endif
+
+#ifdef CONFIG_ETH_MAC_FROM_IDB
+	err = eth_mac_idb(dev->dev_addr);
+	if (err) {
+		printk("read mac from IDB fail.\n");
+	} else {
+		if (is_valid_ether_addr(dev->dev_addr)) {
+			printk("eth_mac_from_idb***********:%X:%X:%X:%X:%X:%X\n",dev->dev_addr[0],
+						dev->dev_addr[1],dev->dev_addr[2],dev->dev_addr[3],
+						dev->dev_addr[4],dev->dev_addr[5] );
+		}
+	}
+#endif
+
+#ifdef CONFIG_ETH_MAC_FROM_WIFI_MAC
+	err = eth_mac_wifi(dev->dev_addr);
+	if (err) {
+		printk("read mac from Wifi  fail.\n");
+	} else {
+		if (is_valid_ether_addr(dev->dev_addr)) {
+			printk("eth_mac_from_wifi_mac***********:%X:%X:%X:%X:%X:%X\n",dev->dev_addr[0],
+						dev->dev_addr[1],dev->dev_addr[2],dev->dev_addr[3],
+						dev->dev_addr[4],dev->dev_addr[5] );
+		}
+	}
+#endif
+
+#ifdef CONFIG_ETH_MAC_FROM_SECURE_CHIP
+
+#endif
+         
+
+	if (!is_valid_ether_addr(dev->dev_addr)) {
+		strlcpy(dev->dev_addr,current_mac,6);
+		printk("eth_mac_from_RANDOM***********:%X:%X:%X:%X:%X:%X\n",dev->dev_addr[0],
+						dev->dev_addr[1],dev->dev_addr[2],dev->dev_addr[3],
+						dev->dev_addr[4],dev->dev_addr[5] );
+	}
+//add end	
 
 	/* mac address changed? */
 	write_mac_reg(dev, dev->dev_addr);
@@ -1432,10 +1502,10 @@ static void vmac_set_multicast_list(struct net_device *dev)
 	spin_lock_irqsave(&ap->lock, flags);
 
 	promisc = !!(dev->flags & IFF_PROMISC);
-	reg = vmac_readl(ap, ENABLE);
+	reg = vmac_readl(ap, CONTROL);
 	if (promisc != !!(reg & PROM_MASK)) {
 		reg ^= PROM_MASK;
-		vmac_writel(ap, reg, ENABLE);
+		vmac_writel(ap, reg, CONTROL);
 	}
 
 	if (dev->flags & IFF_ALLMULTI)

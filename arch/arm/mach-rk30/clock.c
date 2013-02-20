@@ -254,8 +254,14 @@ int clk_set_rate_nolock(struct clk *clk, unsigned long rate)
 	int ret;
 	unsigned long old_rate;
 
+//$_rbox_modify_$_chenzhi_20120616: remove if
+//$_rbox_modify_$_begin
+#if 0
 	if (rate == clk->rate)
 		return 0;
+#endif
+//$_rbox_modify_$_end
+
 	if (clk->flags & CONFIG_PARTICIPANT)
 		return -EINVAL;
 
@@ -696,14 +702,14 @@ cnu_out:
 }
 EXPORT_SYMBOL(rk30_clk_notifier_unregister);
 
+#ifdef CONFIG_PROC_FS
 static struct clk_dump_ops *dump_def_ops;
 
 void clk_register_dump_ops(struct clk_dump_ops *ops)
 {
 	dump_def_ops=ops;
 }
-
-#ifdef CONFIG_RK_CLOCK_PROC
+	
 static int proc_clk_show(struct seq_file *s, void *v)
 {
 	struct clk* clk;
@@ -747,5 +753,5 @@ static int __init clk_proc_init(void)
 
 }
 late_initcall(clk_proc_init);
-#endif /* CONFIG_RK_CLOCK_PROC */
+#endif /* CONFIG_PROC_FS */
 

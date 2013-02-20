@@ -1,3 +1,4 @@
+
 /*
  * rk29_pcm.c  --  ALSA SoC ROCKCHIP PCM Audio Layer Platform driver
  *
@@ -28,10 +29,9 @@
 
 #include "rk29_pcm.h"
 
-#define PCM_DMA_DEBUG 0
 
 #if 0
-#define DBG(x...) printk(KERN_DEBUG x)
+#define DBG(x...) printk(KERN_INFO x)
 #else
 #define DBG(x...) do { } while (0)
 #endif
@@ -49,17 +49,9 @@ static const struct snd_pcm_hardware rockchip_pcm_hardware = {
 				    SNDRV_PCM_FMTBIT_S16_LE,
 	.channels_min		= 2,
 	.channels_max		= 8,
-#ifdef CONFIG_RK_SRAM_DMA
-	.buffer_bytes_max	= 24*1024,//period_bytes_max * periods_max
-#else
 	.buffer_bytes_max	= 128*1024,
-#endif
 	.period_bytes_min	= 64,  ///PAGE_SIZE,
-#ifdef CONFIG_RK_SRAM_DMA
-	.period_bytes_max	= 8*1024,
-#else
 	.period_bytes_max	= 2048*4,///PAGE_SIZE*2,
-#endif
 	.periods_min		= 3,///2,
 	.periods_max		= 128,
 	.fifo_size		= 16,
@@ -99,11 +91,12 @@ static void rockchip_pcm_enqueue(struct snd_pcm_substream *substream)
 	dma_addr_t pos = prtd->dma_pos;
 	int ret;
 
-//	DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
+        DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
         
-	while (prtd->dma_loaded < prtd->dma_limit) {
+        while (prtd->dma_loaded < prtd->dma_limit) {
 		unsigned long len = prtd->dma_period;
-//	DBG("dma_loaded: %d\n", prtd->dma_loaded);
+		
+                DBG("dma_loaded: %d\n", prtd->dma_loaded);
 		if ((pos + len) > prtd->dma_end) {
 			len  = prtd->dma_end - pos;
 		}
@@ -124,10 +117,12 @@ static void rockchip_pcm_enqueue(struct snd_pcm_substream *substream)
 		}
 
 
-		ret = rk29_dma_enqueue(prtd->params->channel,substream, pos, len);
-//		if(prtd->params->channel == 2)
-			DBG("Enter::%s, %d, ret=%d, Channel=%d, Addr=0x%X, Len=%lu\n",
-                   __FUNCTION__,__LINE__, ret, prtd->params->channel, pos, len);		        
+		ret = rk29_dma_enqueue(prtd->params->channel, 
+		        substream, pos, len);
+                
+		DBG("Enter::%s, %d, ret=%d, Channel=%d, Addr=0x%X, Len=%lu\n",
+		        __FUNCTION__,__LINE__, ret, prtd->params->channel, pos, len);
+ 	        
 		if (ret == 0) {
 			prtd->dma_loaded++;
 			pos += prtd->dma_period;
@@ -140,53 +135,36 @@ static void rockchip_pcm_enqueue(struct snd_pcm_substream *substream)
 	prtd->dma_pos = pos;
 }
 
+
 void rk29_audio_buffdone(void *dev_id, int size,
 				   enum rk29_dma_buffresult result)
 {
 	struct snd_pcm_substream *substream = dev_id;
 	struct rockchip_runtime_data *prtd;
-#if PCM_DMA_DEBUG
-	static ktime_t before = {0},after = {0};
-	s64 t;
-	before = after;
-	after = ktime_get();
-	t = ktime_to_us(ktime_sub(after, before));
-	if(result == RK29_RES_OK)
-	{
-		if(t > 23220+73 && t != ktime_to_us(after)) // 4096/4/44100 + 32/44100 
-		{
-			printk(KERN_DEBUG "Time out:: Audio DMA buffdone time out!!! the time = %lld!\n", t);
-		}
-		printk(KERN_DEBUG "audio DMA callback time = %lld\n", t);
-	}
-//	printk(KERN_DEBUG "a %d %d\n", size, result);
-#endif
+
 	DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
 	
-	if (!substream){
-		DBG("substream is free\n");
+	if (!substream)
 		return;
-	}	
-	if (!substream->runtime){
-		DBG("substream->runtime is free\n");
+	if (!substream->runtime)
 		return;
-	}	
+		
 	switch(result)
 	{
 	case RK29_RES_OK:
+		DBG("::%s----%d  RK29_RES_OK\n",__FUNCTION__,__LINE__);
 		break;
 	case RK29_RES_ERR:
+		DBG("::%s----%d  RK29_RES_ERR\n",__FUNCTION__,__LINE__);
+		break;
 	case RK29_RES_ABORT:
-		DBG("Enter::%s dma about or error result = %d \n",__FUNCTION__,result);
+		DBG("Enter::%s----%d RK29_RES_ABORT \n",__FUNCTION__,__LINE__);
 		return;
 	}
-
 	prtd = substream->runtime->private_data;
-	
-//	if(prtd->params->channel == 2)
-		DBG("Enter::%s----%d   channel =%d \n",__FUNCTION__,__LINE__);	
 	if(!(prtd->state & ST_RUNNING))
 		return;	
+	DBG("Enter::%s----%d, substream=%p, prtd=%p\n",__FUNCTION__,__LINE__, substream, prtd);
 	if (substream){
 		snd_pcm_period_elapsed(substream);
 	}
@@ -216,39 +194,56 @@ static int rockchip_pcm_hw_params(struct snd_pcm_substream *substream,
 	int ret = 0;
 
 	DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
+	/*by Vincent Hsiung for EQ Vol Change*/
+	#define HW_PARAMS_FLAG_EQVOL_ON 0x21
+	#define HW_PARAMS_FLAG_EQVOL_OFF 0x22
+
+        if ((params->flags == HW_PARAMS_FLAG_EQVOL_ON)||(params->flags == HW_PARAMS_FLAG_EQVOL_OFF))
+    	{
+    		return 0;
+    	}
+
 	/* return if this is a bufferless transfer e.g.
 	 * codec <--> BT codec or GSM modem -- lg FIXME */
 	if (!dma)
 		return 0;
-
+DBG("Enter::11111%s----%d\n",__FUNCTION__,__LINE__);
 	/* this may get called several times by oss emulation
 	 * with different params -HW */
 	if (prtd->params == NULL) {
 		/* prepare DMA */
 		prtd->params = dma;
-#ifdef CONFIG_SND_I2S_DMA_EVENT_DYNAMIC
-		DBG("params %p, client %p, channel %d\n", prtd->params,prtd->params->client, prtd->params->channel);
-		ret = rk29_dma_request(prtd->params->channel, prtd->params->client, NULL);
-		DBG("Enter::%s, %d, ret=%d, Channel=%d\n", __FUNCTION__, __LINE__, ret, prtd->params->channel);
+#ifdef CONFIG_SND_DMA_EVENT_DYNAMIC
+		DBG("params %p, client %p, channel %d\n", prtd->params,
+			prtd->params->client, prtd->params->channel);
+
+                ret = rk29_dma_request(prtd->params->channel, prtd->params->client, NULL);
+                DBG("Enter::%s, %d, ret=%d, Channel=%d\n", __FUNCTION__, __LINE__, ret, prtd->params->channel);
+/*
+                if(ret){
+			for(prtd->params->channel=5;prtd->params->channel>0;prtd->params->channel--){
+				ret = request_dma(prtd->params->channel, "i2s");
+				if(!ret)break;
+			}
+		}
+*/		
 		if (ret) {
 			DBG(KERN_ERR "failed to get dma channel\n");
 			return ret;
 		}
 #endif
 	}
+	
 
-	ret = rk29_dma_set_buffdone_fn(prtd->params->channel, rk29_audio_buffdone);
-	if(ret < 0){
-		DBG(KERN_ERR "failed to rk29_dma_set_buffdone_fn\n");
-		return ret;
-	}
+	rk29_dma_set_buffdone_fn(prtd->params->channel, rk29_audio_buffdone);
+
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
 
 	runtime->dma_bytes = totbytes;
 
 	spin_lock_irq(&prtd->lock);
 	prtd->dma_loaded = 0;
-	prtd->dma_limit = params_periods(params);//runtime->hw.periods_min;
+	prtd->dma_limit = runtime->hw.periods_min;
 	prtd->dma_period = params_period_bytes(params);
 	prtd->dma_start = runtime->dma_addr;
 	prtd->dma_pos = prtd->dma_start;
@@ -258,7 +253,8 @@ static int rockchip_pcm_hw_params(struct snd_pcm_substream *substream,
 	prtd->next = NULL;
 	prtd->end = NULL;
 	spin_unlock_irq(&prtd->lock);
-	return ret;
+
+	return 0;
 }
 
 static int rockchip_pcm_hw_free(struct snd_pcm_substream *substream)
@@ -267,10 +263,11 @@ static int rockchip_pcm_hw_free(struct snd_pcm_substream *substream)
 
 	DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
 	/* TODO - do we need to ensure DMA flushed */
+	
 	snd_pcm_set_runtime_buffer(substream, NULL);
 
 	if (prtd->params) {
-#ifdef CONFIG_SND_I2S_DMA_EVENT_DYNAMIC		
+#ifdef CONFIG_SND_DMA_EVENT_DYNAMIC	
 		rk29_dma_free(prtd->params->channel, prtd->params->client);
 		prtd->params = NULL;
 #endif		
@@ -356,6 +353,7 @@ static int rockchip_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_START:
 	        DBG(" START \n");
 	    prtd->state |= ST_RUNNING;
+
 	    rk29_dma_ctrl(prtd->params->channel, RK29_DMAOP_START);
 		break;
 	case SNDRV_PCM_TRIGGER_RESUME:
@@ -370,7 +368,12 @@ static int rockchip_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 	    DBG(" STOPS \n");
 		prtd->state &= ~ST_RUNNING;
+
 		rk29_dma_ctrl(prtd->params->channel, RK29_DMAOP_STOP);
+#ifdef CONFIG_ANDROID_POWER        
+        android_unlock_suspend(&audio_lock );
+        DBG("%s::stop audio , unlock system suspend\n" , __func__ );
+#endif
 		break;
 	default:
 		ret = -EINVAL;
@@ -390,12 +393,12 @@ rockchip_pcm_pointer(struct snd_pcm_substream *substream)
 	unsigned long res;
 	dma_addr_t src, dst;
 	snd_pcm_uframes_t ret;
-    
-
+	 
+	DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
 	spin_lock(&prtd->lock);
 
 	rk29_dma_getposition(prtd->params->channel, &src, &dst);
-	
+
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 		res = dst - prtd->dma_start;
 	else
@@ -403,13 +406,11 @@ rockchip_pcm_pointer(struct snd_pcm_substream *substream)
 
 	spin_unlock(&prtd->lock);
 
+	DBG("Pointer %x %x\n",src,dst);	
+
 	ret = bytes_to_frames(runtime, res);
 	if (ret == runtime->buffer_size)
 		ret = 0;
-		
-	if(prtd->params->channel == 2)		
-		DBG("Enter:%s src = %x res = %x ret = %d\n",__FUNCTION__,src,res,ret);	
-
 	return ret;	
 }
 
@@ -447,6 +448,7 @@ static int rockchip_pcm_close(struct snd_pcm_substream *substream)
 
 	if (prtd->params)
 		rk29_dma_set_buffdone_fn(prtd->params->channel, NULL);
+		
 	sg_buf = prtd->curr;
 
 	while (sg_buf != NULL) {
@@ -487,13 +489,6 @@ static struct snd_pcm_ops rockchip_pcm_ops = {
 	.mmap		= rockchip_pcm_mmap,
 };
 
-#ifdef CONFIG_ARCH_RK30
-#define SRAM_DMA_PHYS_PLAYBACK	(dma_addr_t)(RK30_IMEM_PHYS + 16*1024)
-#define SRAM_DMA_START_PLAYBACK	(RK30_IMEM_NONCACHED + 16*1024)
-#define SRAM_DMA_PHYS_CAPTURE 	(dma_addr_t)(SRAM_DMA_PHYS_PLAYBACK + 24*1024)
-#define SRAM_DMA_START_CAPTURE	(SRAM_DMA_START_PLAYBACK + 24*1024)
-#endif
-
 static int rockchip_pcm_preallocate_dma_buffer(struct snd_pcm *pcm, int stream)
 {
 	struct snd_pcm_substream *substream = pcm->streams[stream].substream;
@@ -505,18 +500,8 @@ static int rockchip_pcm_preallocate_dma_buffer(struct snd_pcm *pcm, int stream)
 	buf->dev.type = SNDRV_DMA_TYPE_DEV;
 	buf->dev.dev = pcm->card->dev;
 	buf->private_data = NULL;
-#ifdef CONFIG_RK_SRAM_DMA
-	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		buf->area = SRAM_DMA_START_PLAYBACK;
-		buf->addr = SRAM_DMA_PHYS_PLAYBACK;
-	} else{
-		buf->area = SRAM_DMA_START_CAPTURE;
-		buf->addr = SRAM_DMA_PHYS_CAPTURE;		
-	}
-#else
 	buf->area = dma_alloc_writecombine(pcm->card->dev, size,
 					   &buf->addr, GFP_KERNEL);
-#endif
 	if (!buf->area)
 		return -ENOMEM;
 	buf->bytes = size;

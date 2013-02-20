@@ -1,3 +1,4 @@
+
 /*
  *   (Tentative) USB Audio Driver for ALSA
  *
@@ -47,6 +48,7 @@
 #include <linux/mutex.h>
 #include <linux/usb/audio.h>
 #include <linux/usb/audio-v2.h>
+#include <linux/switch.h>
 
 #include <sound/control.h>
 #include <sound/core.h>
@@ -114,6 +116,33 @@ MODULE_PARM_DESC(ignore_ctl_error,
 static DEFINE_MUTEX(register_mutex);
 static struct snd_usb_audio *usb_chip[SNDRV_CARDS];
 static struct usb_driver usb_audio_driver;
+
+//usb audio card will begin from RBASE_USB_AUDIO_IDX.
+#define RBASE_USB_AUDIO_IDX		(3)
+#define NO_USBAUDIO_PLAYBACK    (-1)
+#define NO_USBAUDIO_CAPTURE    (-1)
+
+struct usb_audio_switch {
+    int playback_switch_cur_state;
+    int capture_switch_cur_state;
+    struct switch_dev sUsbaudio_Playback;
+    struct switch_dev sUsbaudio_Capture;
+};
+
+// state: set card idx
+static struct usb_audio_switch sUsbaudio_Switch = {
+    .playback_switch_cur_state = NO_USBAUDIO_PLAYBACK,
+    .capture_switch_cur_state = NO_USBAUDIO_CAPTURE,
+    .sUsbaudio_Playback = {
+        .name = "usb_audio_playback",
+        .state = NO_USBAUDIO_PLAYBACK, //this means no usb audio playback available
+    },
+
+    .sUsbaudio_Capture = {
+        .name = "usb_audio_capture",
+        .state = NO_USBAUDIO_CAPTURE, //this means no usb audio capture available
+    },
+};
 
 /*
  * disconnect streams
@@ -423,6 +452,60 @@ static int snd_usb_audio_create(struct usb_device *dev, int idx,
 	return 0;
 }
 
+static int usb_audio_card_switch_state_update(struct snd_card *card, bool force){
+	struct snd_device *dev;
+    struct snd_pcm *pcm;
+    struct snd_pcm_str *pstr;
+
+	if (snd_BUG_ON(!card))
+		return -EINVAL;
+    //we use the latest devices
+	list_for_each_entry(dev, &card->devices, list) {
+		if (dev->type == SNDRV_DEV_PCM && dev->state == SNDRV_DEV_REGISTERED) {
+            pcm = (struct snd_pcm*)dev->device_data;
+            if(NULL != pcm){
+                //playback available?
+                pstr = &pcm->streams[SNDRV_PCM_STREAM_PLAYBACK];
+                snd_printdd(KERN_INFO "playback substream_count: 0x%x\n", pstr->substream_count);
+                if(pstr->substream_count>0){
+                    sUsbaudio_Switch.playback_switch_cur_state = card->number;
+                }
+                //capture available?
+                pstr = &pcm->streams[SNDRV_PCM_STREAM_CAPTURE];
+                snd_printdd(KERN_INFO "capture substream_count: 0x%x\n", pstr->substream_count);
+                if(pstr->substream_count>0){
+                    sUsbaudio_Switch.capture_switch_cur_state = card->number;
+                }
+            }
+		}
+	}
+    if(force){
+        switch_set_state(&sUsbaudio_Switch.sUsbaudio_Playback, sUsbaudio_Switch.playback_switch_cur_state);
+        switch_set_state(&sUsbaudio_Switch.sUsbaudio_Capture, sUsbaudio_Switch.capture_switch_cur_state);
+    }
+	return 0;    
+
+}
+
+static void usb_audio_switch_state_update_all(void){
+    int index=0;
+    struct snd_card *card;
+
+    sUsbaudio_Switch.playback_switch_cur_state = NO_USBAUDIO_PLAYBACK;
+    sUsbaudio_Switch.capture_switch_cur_state = NO_USBAUDIO_CAPTURE;
+    
+    for(index=0; index < SNDRV_CARDS; ++index){
+        if(NULL != usb_chip[index]){
+            card = usb_chip[index]->card;
+            usb_audio_card_switch_state_update(card, false);
+        }
+    }
+    
+    switch_set_state(&sUsbaudio_Switch.sUsbaudio_Playback, sUsbaudio_Switch.playback_switch_cur_state);
+    switch_set_state(&sUsbaudio_Switch.sUsbaudio_Capture, sUsbaudio_Switch.capture_switch_cur_state);    
+}
+
+
 /*
  * probe the active usb device
  *
@@ -443,7 +526,6 @@ static void *snd_usb_audio_probe(struct usb_device *dev,
 	struct usb_host_interface *alts;
 	int ifnum;
 	u32 id;
-
 	alts = &intf->altsetting[0];
 	ifnum = get_iface_desc(alts)->bInterfaceNumber;
 	id = USB_ID(le16_to_cpu(dev->descriptor.idVendor),
@@ -476,7 +558,8 @@ static void *snd_usb_audio_probe(struct usb_device *dev,
 		/* it's a fresh one.
 		 * now look for an empty slot and create a new card instance
 		 */
-		for (i = 0; i < SNDRV_CARDS; i++)
+		// use RBASE_USB_AUDIO_IDX instead of zero, modify by zxg.
+		for (i = RBASE_USB_AUDIO_IDX; i < SNDRV_CARDS; i++)
 			if (enable[i] && ! usb_chip[i] &&
 			    (vid[i] == -1 || vid[i] == USB_ID_VENDOR(id)) &&
 			    (pid[i] == -1 || pid[i] == USB_ID_PRODUCT(id))) {
@@ -521,7 +604,10 @@ static void *snd_usb_audio_probe(struct usb_device *dev,
 	if (snd_card_register(chip->card) < 0) {
 		goto __error;
 	}
-
+    if(usb_audio_card_switch_state_update(chip->card, true) < 0){
+        printk(KERN_ERR "usb_audio_card_switch_state_update failed!!!\n");
+        goto __error;
+    }
 	usb_chip[chip->index] = chip;
 	chip->num_interfaces++;
 	chip->probing = 0;
@@ -548,7 +634,6 @@ static void snd_usb_audio_disconnect(struct usb_device *dev, void *ptr)
 	struct snd_usb_audio *chip;
 	struct snd_card *card;
 	struct list_head *p;
-
 	if (ptr == (void *)-1L)
 		return;
 
@@ -580,6 +665,7 @@ static void snd_usb_audio_disconnect(struct usb_device *dev, void *ptr)
 		mutex_unlock(&chip->shutdown_mutex);
 		mutex_unlock(&register_mutex);
 	}
+    usb_audio_switch_state_update_all();
 }
 
 /*
@@ -712,17 +798,47 @@ static struct usb_driver usb_audio_driver = {
 
 static int __init snd_usb_audio_init(void)
 {
+    int ret;
+    int i;
+    ret = switch_dev_register(&sUsbaudio_Switch.sUsbaudio_Playback);
+    if(ret)
+        goto err;
+    ret = switch_dev_register(&sUsbaudio_Switch.sUsbaudio_Capture);
+    if(ret)
+        goto err_drv;
+
+    switch_set_state(&sUsbaudio_Switch.sUsbaudio_Playback, NO_USBAUDIO_PLAYBACK);
+    switch_set_state(&sUsbaudio_Switch.sUsbaudio_Capture, NO_USBAUDIO_CAPTURE);
+    
 	if (nrpacks < 1 || nrpacks > MAX_PACKS) {
 		printk(KERN_WARNING "invalid nrpacks value.\n");
 		return -EINVAL;
 	}
+    //re initial array index for rebasing usb audio cards create, modify by zxg.
+    for(i=0; i<SNDRV_CARDS; ++i){
+        index[i] = i;
+    }
+	
 	return usb_register(&usb_audio_driver);
+
+err_drv:
+    switch_dev_unregister(&sUsbaudio_Switch.sUsbaudio_Playback);
+err:
+    return ret;
+    
 }
 
 static void __exit snd_usb_audio_cleanup(void)
 {
 	usb_deregister(&usb_audio_driver);
+    switch_dev_unregister(&sUsbaudio_Switch.sUsbaudio_Capture);
+    switch_dev_unregister(&sUsbaudio_Switch.sUsbaudio_Playback);
 }
 
-module_init(snd_usb_audio_init);
+//module_init(snd_usb_audio_init);
+/* use late initcall_sync instead of module_init,
+ * make sure that usbaudio probe after board codec.
+ * added by zxg@rock-chips.com
+ */
+late_initcall_sync(snd_usb_audio_init);
 module_exit(snd_usb_audio_cleanup);

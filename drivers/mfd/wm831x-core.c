@@ -19,7 +19,6 @@
 #include <linux/mfd/core.h>
 #include <linux/slab.h>
 #include <linux/irq.h>
-#include <linux/gpio.h>
 
 #include <linux/mfd/wm831x/core.h>
 #include <linux/mfd/wm831x/pdata.h>
@@ -1463,7 +1462,6 @@ static struct mfd_cell backlight_devs[] = {
 	},
 };
 
-extern int board_wm831x;
 /*
  * Instantiate the generic non-control parts of the device.
  */
@@ -1472,7 +1470,7 @@ int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 	struct wm831x_pdata *pdata = wm831x->dev->platform_data;
 	int rev;
 	enum wm831x_parent parent;
-	int ret, i, gpio;
+	int ret, i;
 
 	mutex_init(&wm831x->io_lock);
 	mutex_init(&wm831x->key_lock);
@@ -1731,16 +1729,13 @@ int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 			goto err_irq;
 		}
 	}
-
-	board_wm831x = 1;
+	
 	return 0;
 
 err_irq:
 	wm831x_irq_exit(wm831x);
 err:
 	mfd_remove_devices(wm831x->dev);
-	gpio = irq_to_gpio(irq);
-	gpio_free(gpio);
 	kfree(wm831x);
 	return ret;
 }

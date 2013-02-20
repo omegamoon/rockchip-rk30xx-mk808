@@ -1,0 +1,51 @@
+#
+# Display drivers configuration
+#
+
+menuconfig HDMI_ITV
+	bool "HDMI support(itv version)"
+    depends on FB_RK29 || FB_ROCKCHIP
+
+source "drivers/video/display/hdmi/chips/Kconfig"
+
+choice
+	prompt "HDMI output mode select"
+	depends on HDMI_ITV
+config HDMI_MODE_ALWAYS_HDMI
+	bool "always hdmi"
+config HDMI_MODE_ALWAYS_DVI
+	bool "always dvi"
+config HDMI_MODE_DEPEND_EDID
+	bool "depended on EDID"
+endchoice
+
+config HDMI_HDCP_ENABLE
+	bool "HDMI HDCP Function Enable"
+	depends on HDMI_ITV
+	help
+		select enable HDCP function.
+
+config HDMI_USE_IRQ
+	bool "Use IRQ Mode to Poll HDMI Status."
+	depends on HDMI_ITV
+	help
+		If selected, use irq mode to poll HDMI status.
+		If not selected, use poll mode to poll HDMI status.
+		
+if	ANX7150 && HDMI_USE_IRQ
+choice
+	prompt "ANX7150 IRQ type"
+config ANX7150_IRQ_USE_RK29PIO
+	bool "use rk29 pio to detect irq"
+	
+config ANX7150_IRQ_USE_CHIP
+	bool "use anx7150 irq pin to detet irq"
+
+endchoice
+endif
+
+config HDMI_DEBUG
+	bool "HDMI Transmitter Debugging"
+	depends on HDMI_ITV
+	help
+		Enableds verbose debugging the the HDMI Transmitter drivers.

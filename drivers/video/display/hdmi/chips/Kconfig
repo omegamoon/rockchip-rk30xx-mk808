@@ -1,0 +1,50 @@
+choice
+	prompt "HDMI/MHL Transmitter Select"
+	depends on HDMI_ITV
+	
+config ANX7150
+	bool "Analogix HDMI transmitter ANX7150 support"
+	depends on HDMI_ITV
+	
+config CAT6611
+	bool "ITE HDMI transmitter IT6610 support"
+	depends on HDMI_ITV
+	
+config IT66121
+	bool "ITE HDMI transmitter IT66121 support(EXPERIMENTAL)"
+	depends on HDMI_ITV
+	
+config SII902X
+	bool "Silicon Image HDMI transmitter SiI9022A/9024A support"
+	depends on HDMI_ITV
+	
+config SII92326
+	bool "Silicon Image MHL transmitter SiI9232/9236 support"
+	select HDMI_USE_IRQ
+	depends on HDMI_ITV
+	help
+        	MHL Transmitter is a HD video transmitter chip 
+		over micro-USB connector for mobile device.
+config ANX7805
+	bool "Analogix Slimport transmitter ANX7805 support(EXPERIMENTAL)"
+	depends on HDMI_ITV
+	help
+        	Slimport Transmitter (SP_TX) is a HD video transmitter chip 
+		over micro-USB connector for smartphone device.
+
+config RK610_HDMI
+	bool "Rockchip HDMI transimtter RK610(Jetta)"
+	depends on HDMI_ITV
+	select MFD_RK610
+	help
+		If you need to use HDMI in RK610(jetta) which is a multifunction 
+		device, please select Y. 
+
+config SII9244
+	bool  "Silicon Image MHL transmitter SiI9244 support"
+	depends on HDMI_ITV
+	help
+		MHL Transmitter is a HD video transmitter chip over micro-USB 
+		connector for mobile device. The SiI9244 device receives HDMI data 
+		and transcodes it into a MHL TMDS data stream.
+endchoice

@@ -1,3 +1,4 @@
+
 /*
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -432,6 +433,15 @@ int snd_usb_parse_audio_endpoints(struct snd_usb_audio *chip, int iface_no)
 		}
 
 		snd_printdd(KERN_INFO "%d:%u:%d: add audio endpoint %#x\n", dev->devnum, iface_no, altno, fp->endpoint);
+		#ifndef CONFIG_ARCH_RK30
+		//filter usb20_host playback, because usb20_host control do not support periodic out xfer. added by zxg@rock-chips.com
+		if(stream == SNDRV_PCM_STREAM_PLAYBACK && NULL != strstr(chip->card->longname, "usb-usb20_host")){
+			printk(KERN_ERR "[%s]: skip usb20 host playback pcm\n", __FUNCTION__);
+			kfree(fp->rate_table);
+			kfree(fp);
+			continue;
+		}
+		#endif
 		err = snd_usb_add_audio_endpoint(chip, stream, fp);
 		if (err < 0) {
 			kfree(fp->rate_table);

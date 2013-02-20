@@ -47,6 +47,14 @@
 #include "dwc_otg_driver.h"
 #include "dwc_otg_pcd.h"
 #include "dwc_otg_hcd.h"
+#include <linux/suspend.h>
+
+
+#ifdef CONFIG_DWC_REMOTE_WAKEUP
+extern void rk28_send_wakeup_key(void);
+extern suspend_state_t get_suspend_state(void);
+#endif
+
 
 #if 1//#ifdef DEBUG
 inline const char *op_state_str( dwc_otg_core_if_t *_core_if ) 
@@ -342,6 +350,7 @@ int32_t dwc_otg_handle_otg_intr(dwc_otg_core_if_t *_core_if)
 extern void dwc_otg_force_device(dwc_otg_core_if_t *core_if);
 extern void dwc_otg_force_host(dwc_otg_core_if_t *core_if);
 extern int dwc_otg20phy_suspend( int exitsuspend );
+extern int rk28_usb_suspend( int exitsuspend );
 #endif
 
 int32_t dwc_otg_handle_conn_id_status_change_intr(dwc_otg_core_if_t *_core_if)
@@ -717,27 +726,50 @@ static inline uint32_t dwc_otg_read_common_intr(dwc_otg_core_if_t *_core_if)
 int32_t dwc_otg_handle_common_intr( dwc_otg_core_if_t *_core_if )
 {
 	int retval = 0;
-        gintsts_data_t gintsts;
+    gintsts_data_t gintsts;
+#ifdef CONFIG_DWC_REMOTE_WAKEUP        
+    int rk29_usb_wakeup = 0;
+#endif 
 
         gintsts.d32 = dwc_otg_read_common_intr(_core_if);
 
         if (gintsts.b.modemismatch) {
-                retval |= dwc_otg_handle_mode_mismatch_intr( _core_if );
+                retval |= dwc_otg_handle_mode_mismatch_intr( _core_if ); 
+#ifdef CONFIG_DWC_REMOTE_WAKEUP                 
+                rk29_usb_wakeup = 1;  
+#endif 
+
         }
         if (gintsts.b.otgintr) {
                 retval |= dwc_otg_handle_otg_intr( _core_if );
+#ifdef CONFIG_DWC_REMOTE_WAKEUP                 
+                rk29_usb_wakeup = 1; 
+#endif 
+
         }
         if (gintsts.b.conidstschng) {
-                retval |= dwc_otg_handle_conn_id_status_change_intr( _core_if );
+                retval |= dwc_otg_handle_conn_id_status_change_intr( _core_if );  
+#ifdef CONFIG_DWC_REMOTE_WAKEUP                 
+                rk29_usb_wakeup = 1;  
+#endif 
+
         }
         if (gintsts.b.disconnect) {
                 retval |= dwc_otg_handle_disconnect_intr( _core_if );
         }
         if (gintsts.b.sessreqintr) {
                 retval |= dwc_otg_handle_session_req_intr( _core_if );
+#ifdef CONFIG_DWC_REMOTE_WAKEUP                 
+                rk29_usb_wakeup = 1;
+#endif 
+
         }
         if (gintsts.b.wkupintr) {
                 retval |= dwc_otg_handle_wakeup_detected_intr( _core_if );
+#ifdef CONFIG_DWC_REMOTE_WAKEUP                 
+                rk29_usb_wakeup = 1;
+#endif 
+
         }
         if (gintsts.b.usbsuspend) {
                 retval |= dwc_otg_handle_usb_suspend_intr( _core_if );
@@ -751,8 +783,16 @@ int32_t dwc_otg_handle_common_intr( dwc_otg_core_if_t *_core_if )
                 dwc_write_reg32(&_core_if->core_global_regs->gintsts, 
                                 gintsts.d32);
                 retval |= 1;
-                
+ #ifdef CONFIG_DWC_REMOTE_WAKEUP                
+                rk29_usb_wakeup = 1; 
+ #endif
         }
+#ifdef CONFIG_DWC_REMOTE_WAKEUP        
+        if (rk29_usb_wakeup && get_suspend_state()){
+            rk28_send_wakeup_key();
+            rk29_usb_wakeup = 0;
+        }
+#endif        
         return retval;
 }
 
