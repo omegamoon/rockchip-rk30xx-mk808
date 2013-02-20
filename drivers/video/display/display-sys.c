@@ -5,6 +5,8 @@
 #include <linux/kdev_t.h>
 #include <linux/display-sys.h>
 
+#define OMEGAMOON_CHANGED	1
+
 static struct list_head main_display_device_list;
 static struct list_head aux_display_device_list;
 
@@ -53,6 +55,33 @@ static ssize_t display_store_enable(struct device *dev,
 		dsp->ops->setenable(dsp, enable);
 	return size;
 }
+
+#ifdef OMEGAMOON_CHANGED
+static ssize_t display_show_autoconfig(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct rk_display_device *dsp = dev_get_drvdata(dev);
+	int autoconfig;
+	if(dsp->ops && dsp->ops->getautoconfig)
+		autoconfig = dsp->ops->getautoconfig(dsp);
+	else
+		return 0;
+	return snprintf(buf, PAGE_SIZE, "%d\n", autoconfig);
+}
+
+static ssize_t display_store_autoconfig(struct device *dev, 
+						struct device_attribute *attr,
+			 			const char *buf, size_t size)
+{
+	struct rk_display_device *dsp = dev_get_drvdata(dev);
+	int autoconfig;
+	
+	sscanf(buf, "%d", &autoconfig);
+	if(dsp->ops && dsp->ops->setautoconfig)
+		dsp->ops->setautoconfig(dsp, autoconfig);
+	return size;
+}
+#endif
 
 static ssize_t display_show_connect(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -206,6 +235,9 @@ static struct device_attribute display_attrs[] = {
 	__ATTR(modes, S_IRUGO, display_show_modes, NULL),
 	__ATTR(mode, 0664, display_show_mode, display_store_mode),
 	__ATTR(scale, 0664, display_show_scale, display_store_scale),
+#ifdef OMEGAMOON_CHANGED
+	__ATTR(autoconfig, 0664, display_show_autoconfig, display_store_autoconfig),
+#endif
 	__ATTR_NULL
 };
 

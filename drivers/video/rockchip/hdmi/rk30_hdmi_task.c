@@ -3,11 +3,15 @@
 #include "rk30_hdmi.h"
 #include "rk30_hdmi_hw.h"
 
+#define OMEGAMOON_CHANGED 	1
+#define DEBUG				1
+
 #ifdef CONFIG_HDMI_RK30_CTL_CODEC
 extern void codec_set_spk(bool on);
 #endif
 
-#define HDMI_MAX_TRY_TIMES	1
+// Omegamoon: Increased retries from 1 to 3 to fix "blank screen" issue
+#define HDMI_MAX_TRY_TIMES	3
 
 //static char *envp[] = {"INTERFACE=HDMI", NULL};
 
@@ -193,7 +197,69 @@ void hdmi_work(struct work_struct *work)
 	}
 	hotplug = rk30_hdmi_detect_hotplug();
 	hdmi_dbg(hdmi->dev, "[%s] hotplug %02x curvalue %d\n", __FUNCTION__, hotplug, hdmi->hotplug);
-	
+
+#ifdef OMEGAMOON_CHANGED
+	/* 
+	   Omegamoon: HDMI 'black screen/No signal' fix
+	   Use sysfs to change this behaviour as follows:
+	   Enable autoconfig: 
+	     echo "1">/sys/devices/virtual/display/display0.HDMI/autoconfig
+	   Disable autoconfig (default): 
+	     echo "0">/sys/devices/virtual/display/display0.HDMI/autoconfig
+	*/
+	if(hdmi->autoconfig == HDMI_ENABLE) {
+		// This is the original HDMI handling
+		if(hotplug != hdmi->hotplug) {
+			if(hotplug  == HDMI_HPD_ACTIVED){
+				hdmi->state = READ_PARSE_EDID;
+			}
+			else if(hdmi->hotplug == HDMI_HPD_ACTIVED) {
+				hdmi_sys_remove();
+				hdmi->hotplug = hotplug;
+				if(hotplug == HDMI_HPD_REMOVED)
+					hdmi_sys_sleep();
+				else {
+					hdmi->state = WAIT_HOTPLUG;
+					rk30_hdmi_removed();
+				}
+				if(hdmi->wait == 1) {
+					complete(&hdmi->complete);
+					hdmi->wait = 0;	
+				}
+				mutex_unlock(&work_mutex);
+				return;
+			}
+			else if(hotplug == HDMI_HPD_REMOVED) {
+				hdmi->state = HDMI_SLEEP;
+				rk30_hdmi_removed();
+			}
+			hdmi->hotplug  = hotplug;
+		} 
+		else if(hotplug == HDMI_HPD_REMOVED)
+			hdmi_sys_sleep();
+	} else {
+		/*
+		  If autoconfig is disabled, the Hotplug feature is also disabled.
+		  EDID is no longer read from the display, and a fixed resolution is set.
+		*/
+		if(hotplug != hdmi->hotplug) {
+			hdmi->state = SYSTEM_CONFIG;
+			hdmi->hotplug = HDMI_HPD_ACTIVED;
+#ifdef HDMI_RK30_MODE_ALWAYS_HDMI			
+			// Omegamoon: Fixed HDMI output
+			dev_printk(KERN_INFO, hdmi->dev, "Omegamoon: Force HDMI output\n");
+			hdmi->edid.sink_hdmi = OUTPUT_HDMI;
+#endif
+#ifdef HDMI_RK30_MODE_ALWAYS_DVI
+			// Omegamoon: Fixed DVI output
+			dev_printk(KERN_INFO, hdmi->dev, "Omegamoon: Force DVI output\n");
+			hdmi->edid.sink_hdmi = OUTPUT_DVI;
+#endif			
+			// Omegamoon: Apart from this fixed output, see rk30_hdmi.h for default resolution
+		}
+	}
+	// <<< Omegamoon: HDMI Fix
+#else
 	if(hotplug != hdmi->hotplug)
 	{
 		if(hotplug  == HDMI_HPD_ACTIVED){
@@ -223,6 +289,7 @@ void hdmi_work(struct work_struct *work)
 	}
 	else if(hotplug == HDMI_HPD_REMOVED)
 		hdmi_sys_sleep();
+#endif		
 	
 	do {
 		hdmi_sys_show_state(hdmi->state);
@@ -244,10 +311,13 @@ void hdmi_work(struct work_struct *work)
 				}
 				break;
 			case SYSTEM_CONFIG:
-				if(hdmi->autoconfig)	
+				if(hdmi->autoconfig) {
 					hdmi->vic = hdmi_find_best_mode(hdmi, 0);
-				else
-					hdmi->vic = hdmi_find_best_mode(hdmi, hdmi->vic);
+				} else {
+					// Omegamoon: autoconfig is disabled, so set a fixed resolution
+					hdmi->vic = HDMI_VIDEO_DEFAULT_MODE;
+					dev_printk(KERN_INFO, hdmi->dev, "Omegamoon: Forced resolution to %s\n", hdmi_vic_to_videomode(hdmi->vic)->name);
+				}
 				rc = hdmi_switch_fb(hdmi, hdmi->vic);
 				if(rc == HDMI_ERROR_SUCESS)
 					hdmi->state = CONFIG_VIDEO;
@@ -311,6 +381,15 @@ void hdmi_work(struct work_struct *work)
 	
 	}while((hdmi->state != state_last || (rc != HDMI_ERROR_SUCESS) ) && trytimes < HDMI_MAX_TRY_TIMES);
 	
+//	if(trytimes == HDMI_MAX_TRY_TIMES)
+//	{
+//		if(hdmi->hotplug) {
+//			hdmi_sys_remove();
+//			hdmi->hotplug = HDMI_HPD_REMOVED;
+//			hdmi_sys_sleep();
+//
+//		}
+//	}
 	hdmi_dbg(hdmi->dev, "[%s] done\n", __FUNCTION__);
 	mutex_unlock(&work_mutex);
 }

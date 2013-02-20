@@ -4,6 +4,8 @@
 #include <linux/fb.h>
 #include <linux/list.h>
 
+#define OMEGAMOON_CHANGED	1
+
 struct rk_display_device;
 
 enum rk_display_priority {
@@ -46,6 +48,10 @@ struct rk_display_ops {
 	int (*getmode)(struct rk_display_device *, struct fb_videomode *mode);
 	int (*setscale)(struct rk_display_device *, int, int);
 	int (*getscale)(struct rk_display_device *, int);
+//#ifdef OMEGAMOON_CHANGED
+	int (*setautoconfig)(struct rk_display_device *, int enable);
+	int (*getautoconfig)(struct rk_display_device *);
+//#endif
 };
 
 struct rk_display_device {

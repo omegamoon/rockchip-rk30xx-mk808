@@ -20,4 +20,24 @@ config HDMI_RK30_DEBUG
 		help
 		  Enableds verbose debugging the the HDMI drivers
 
+choice
+	prompt "RK30 HDMI output mode select"
+	depends on HDMI_RK30
+config HDMI_RK30_MODE_ALWAYS_HDMI
+	bool "always hdmi"
+config HDMI_RK30_MODE_ALWAYS_DVI
+	bool "always dvi"
+endchoice
+
+choice
+	prompt "RK30 HDMI resolution select"
+	depends on HDMI_RK30
+config HDMI_RK30_RES_720P
+	bool "Default fixed resolution is 720P"
+config HDMI_RK30_RES_1080P
+	bool "Default fixed resolution is 1080P"
+endchoice
+
+
+
 source "drivers/video/rockchip/hdmi/hdcp/Kconfig"

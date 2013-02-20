@@ -1,5 +1,5 @@
 Linux kernel release 3.x for Rockchip RK3066 - www.omegamoon.com
-==============
+--------------
 
 **Build instructions:**
 - Run "make mrproper" to make sure you have no stale .o files and dependencies lying around
@@ -22,3 +22,5 @@ Linux kernel release 3.x for Rockchip RK3066 - www.omegamoon.com
 - Updated README and added build- and flash instructions
 
 - Merged with EasyPad 971 kernel snapshot (i97-8326-1.5)
+
+- Added forced display mode and resolution setting to fix 'Black screen'/'No signal' problem

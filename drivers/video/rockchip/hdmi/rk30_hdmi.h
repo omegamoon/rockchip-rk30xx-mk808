@@ -35,10 +35,19 @@ enum {
 /* If HDMI_ENABLE, system will auto configure output mode according to EDID 
  * If HDMI_DISABLE, system will output mode according to macro HDMI_VIDEO_DEFAULT_MODE
  */
-#define HDMI_AUTO_CONFIGURE			HDMI_ENABLE
+// Omegemoon: HDMI "black screen" issue
+//#define HDMI_AUTO_CONFIGURE			HDMI_ENABLE
+#define HDMI_AUTO_CONFIGURE			HDMI_DISABLE
 
 /* default HDMI output video mode */
-#define HDMI_VIDEO_DEFAULT_MODE			HDMI_1280x720p_60Hz//HDMI_1920x1080p_60Hz
+#if defined(CONFIG_HDMI_RK30_RES_1080P)
+// Omegamoon: Default resolution of 1920x1080 (1080p)
+#define HDMI_VIDEO_DEFAULT_MODE		HDMI_1920x1080p_60Hz
+#else
+// Omegamoon: Default resolution of 1280x720 (720p)
+#define HDMI_VIDEO_DEFAULT_MODE		HDMI_1280x720p_60Hz
+#endif
+
 /* default HDMI output audio mode */
 #define HDMI_AUDIO_DEFAULT_CHANNEL		2
 #define HDMI_AUDIO_DEFAULT_RATE			HDMI_AUDIO_FS_44100

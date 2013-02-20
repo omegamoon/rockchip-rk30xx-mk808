@@ -32,13 +32,16 @@
 #include <plat/ipp.h>
 #include "hdmi/rk_hdmi.h"
 
-
-
+#define OMEGAMOON_CHANGED		1
 #ifdef	CONFIG_FB_MIRRORING
-
-
 int (*video_data_to_mirroring)(struct fb_info *info,u32 yuv_phy[2]) = NULL;
 EXPORT_SYMBOL(video_data_to_mirroring);
+#endif
+#ifdef	FB_WIMO_FLAG
+
+
+int (*video_data_to_wimo)(struct fb_info *info,u32 yuv_phy[2]) = NULL;
+EXPORT_SYMBOL(video_data_to_wimo);
 
 #endif
 static struct platform_device *g_fb_pdev;
@@ -238,6 +241,10 @@ static int rk_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 		#endif
 	#endif
 	dev_drv->pan_display(dev_drv,layer_id);
+	#ifdef	FB_WIMO_FLAG
+	if(video_data_to_wimo!=NULL)
+		video_data_to_wimo(info,NULL);
+ 	#endif
 	#ifdef	CONFIG_FB_MIRRORING
 	if(video_data_to_mirroring!=NULL)
 		video_data_to_mirroring(info,NULL);
@@ -639,6 +646,13 @@ int rk_fb_switch_screen(rk_screen *screen ,int enable ,int lcdc_id)
 	struct rk_fb_inf *inf =  platform_get_drvdata(g_fb_pdev);
 	struct fb_info *info = NULL;
 	struct rk_lcdc_device_driver * dev_drv = NULL;
+#ifndef OMEGAMOON_CHANGED
+	struct fb_info *pmy_info = NULL;
+	struct fb_var_screeninfo *pmy_var = NULL;      //var for primary screen
+	struct fb_var_screeninfo *hdmi_var    = NULL;
+	struct fb_fix_screeninfo *pmy_fix = NULL;
+	struct fb_fix_screeninfo *hdmi_fix    = NULL;
+#endif
 	struct fb_var_screeninfo *var = NULL;
 	struct fb_fix_screeninfo *fix = NULL;
 	char name[6];
@@ -684,7 +698,8 @@ int rk_fb_switch_screen(rk_screen *screen ,int enable ,int lcdc_id)
 		}
 		return 0;
 	}
-	
+
+#ifdef OMEGAMOON_CHANGED
 	xpos = (dev_drv->screen->x_res - dev_drv->screen->x_res*dev_drv->x_scale/100)>>1;
 	ypos = (dev_drv->screen->y_res - dev_drv->screen->y_res*dev_drv->y_scale/100)>>1;
 	xsize = dev_drv->screen->x_res * dev_drv->x_scale/100;
@@ -700,6 +715,43 @@ int rk_fb_switch_screen(rk_screen *screen ,int enable ,int lcdc_id)
 		ret = info->fbops->fb_open(info,1);
 	ret = info->fbops->fb_set_par(info);
 	ret = info->fbops->fb_pan_display(var, info);
+#else	
+	hdmi_var = &info->var;
+	hdmi_fix = &info->fix;
+	#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
+		if(likely(inf->num_lcdc == 2))
+		{
+			pmy_var = &inf->fb[0]->var;
+			pmy_fix = &inf->fb[0]->fix;
+			hdmi_var->xres = pmy_var->xres;
+			hdmi_var->yres = pmy_var->yres;
+			hdmi_var->xres_virtual = pmy_var->xres_virtual;
+			hdmi_var->yres_virtual = pmy_var->yres_virtual;
+			hdmi_var->nonstd &= 0xffffff00;
+			hdmi_var->nonstd |= (pmy_var->nonstd & 0xff); //use the same format as primary screen
+		}
+		else
+		{
+			printk(KERN_WARNING "%s>>only one lcdc,dual display no supported!",__func__);
+		}
+	#endif
+	hdmi_var->grayscale &= 0xff;
+	hdmi_var->grayscale |= (dev_drv->screen->x_res<<8) + (dev_drv->screen->y_res<<20);
+	ret = info->fbops->fb_open(info,1);
+	ret = dev_drv->load_screen(dev_drv,1);
+	ret = info->fbops->fb_set_par(info);
+	#if defined(CONFIG_DUAL_DISP_IN_KERNEL)
+		if(likely(inf->num_lcdc == 2))
+		{
+			pmy_info = inf->fb[0];
+			pmy_info->fbops->fb_pan_display(pmy_var,pmy_info);
+		}
+		else
+		{
+			printk(KERN_WARNING "%s>>only one lcdc,dual display no supported!",__func__);
+		}
+	#endif 
+#endif // <<< OMEGAMOON_CHANGED
 	return 0;
 
 }
@@ -1038,6 +1090,9 @@ int rk_fb_unregister(struct rk_lcdc_device_driver *dev_drv)
 		return -ENOENT;
 	}
 
+       if(dev_drv->screen_ctr_info->io_deinit)
+            dev_drv->screen_ctr_info->io_deinit();
+       
 	for(i = 0; i < fb_num; i++)
 	{
 		kfree(dev_drv->layer_par[i]);

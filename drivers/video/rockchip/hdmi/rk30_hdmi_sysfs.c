@@ -4,6 +4,8 @@
 #include <linux/interrupt.h>
 #include "rk30_hdmi.h"
 
+#define OMEGAMOON_CHANGED	1
+
 static int hdmi_get_enable(struct rk_display_device *device)
 {
 	struct hdmi *hdmi = device->priv_data;
@@ -70,7 +72,10 @@ static int hdmi_set_mode(struct rk_display_device *device, struct fb_videomode *
 	
 	if(!hdmi->hotplug)
 		return -1;
+	
+#ifndef OMEGAMOON_CHANGED	// >>> Omegamoon disabled
 	hdmi->autoconfig = HDMI_DISABLE;
+#endif						// <<< Omegamoon
 	if(vic && hdmi->vic != vic)
 	{
 		hdmi->vic = vic;
@@ -131,6 +136,47 @@ static int hdmi_get_scale(struct rk_display_device *device, int direction)
 		return -1;
 }
 
+//#ifdef OMEGAMOON_CHANGED
+static int hdmi_get_autoconfig(struct rk_display_device *device)
+{
+	struct hdmi *hdmi = device->priv_data;
+	if(hdmi->autoconfig == HDMI_ENABLE)
+		return 1;
+	else
+		return 0;
+}
+
+static int hdmi_set_autoconfig(struct rk_display_device *device, int enable)
+{
+	struct hdmi *hdmi = device->priv_data;
+
+	hdmi_dbg(hdmi->dev, "[%s] autoconfig %02x curvalue %d\n", __FUNCTION__, enable, hdmi->autoconfig);
+	if(enable != hdmi->autoconfig) 
+	{
+		if(enable == 0) {
+			hdmi->autoconfig = HDMI_DISABLE;
+			hdmi->state = SYSTEM_CONFIG;
+#if HDMI_RK30_MODE_ALWAYS_DVI
+			hdmi->edid.sink_hdmi = 0; // 0=DVI
+#elif HDMI_RK30_MODE_ALWAYS_HDMI
+			hdmi->edid.sink_hdmi = 1; // 1=HDMI 
+#endif
+		} else {
+			hdmi->autoconfig = HDMI_ENABLE;
+			hdmi->state = READ_PARSE_EDID;
+		}
+		
+		hdmi->command = HDMI_CONFIG_VIDEO;
+		init_completion(&hdmi->complete);
+		hdmi->wait = 1;
+		queue_delayed_work(hdmi->workqueue, &hdmi->delay_work, 0);
+		wait_for_completion_interruptible_timeout(&hdmi->complete,
+								msecs_to_jiffies(10000));
+	}
+	return 0;
+}
+//#endif
+
 static struct rk_display_ops hdmi_display_ops = {
 	.setenable = hdmi_set_enable,
 	.getenable = hdmi_get_enable,
@@ -140,6 +186,10 @@ static struct rk_display_ops hdmi_display_ops = {
 	.getmode = hdmi_get_mode,
 	.setscale = hdmi_set_scale,
 	.getscale = hdmi_get_scale,
+//#ifdef OMEGAMOON_CHANGED
+	.setautoconfig = hdmi_set_autoconfig,
+	.getautoconfig = hdmi_get_autoconfig,
+//#endif	
 };
 
 static int hdmi_display_probe(struct rk_display_device *device, void *devdata)
