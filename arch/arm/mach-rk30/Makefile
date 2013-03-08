@@ -18,13 +18,17 @@ obj-$(CONFIG_LOCAL_TIMERS) += localtimer.o
 obj-$(CONFIG_PM) += pm.o
 obj-$(CONFIG_CPU_IDLE) += cpuidle.o
 obj-$(CONFIG_CPU_FREQ) += cpufreq.o
+# Omegamoon >> Enable debugging for cpufreq driver
+CFLAGS_cpufreq.o += -DDEBUG
 obj-$(CONFIG_DVFS) += dvfs.o
+CFLAGS_dvfs.o += -DDEBUG
 obj-$(CONFIG_DDR_FREQ) += ddr_freq.o
 obj-$(CONFIG_RK30_I2C_INSRAM) += i2c_sram.o
 
 obj-$(CONFIG_MACH_RK3066_SDK) += board-rk30-sdk.o board-rk30-sdk-key.o
 obj-$(CONFIG_MACH_RK30_SDK) += board-rk30-sdk.o board-rk30-sdk-key.o
 obj-$(CONFIG_MACH_RK30_PHONE) += board-rk30-phone.o board-rk30-phone-key.o
+obj-$(CONFIG_MACH_RK30_PHONE_PAD) += board-rk30-phonepad.o board-rk30-phonepad-key.o board-rk30-phonepad-rfkill.o
 
 ##$_rbox_$_modify_begin
 obj-$(CONFIG_MACH_RK30_BOX) += board-rk30-box.o board-rk30-box-key.o board-rk30-box-rfkill.o
@@ -33,5 +37,6 @@ obj-$(CONFIG_MACH_RK30_BOX_HOTDOG) += board-rk30-box.o board-rk30-box-key.o boar
 ##$_rbox_$_modify_end
 
 obj-$(CONFIG_MACH_RK30_PHONE_LOQUAT) += board-rk30-phone-loquat.o board-rk30-phone-loquat-key.o
+obj-$(CONFIG_MACH_RK30_DS1001B) += board-rk30-ds1001b.o board-rk30-ds1001b-key.o board-rk30-ds1001b-rfkill.o
 obj-$(CONFIG_MACH_RK30_PHONE_A22) += board-rk30-phone-a22.o board-rk30-phone-a22-key.o 
 

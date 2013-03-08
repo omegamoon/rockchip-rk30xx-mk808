@@ -1811,7 +1811,10 @@ static struct dvfs_arm_table dvfs_cpu_logic_table[] = {
     // Omegamoon >> Try experimenting with lower voltage here
     {.frequency = 1608 * 1000,	.cpu_volt = 1375 * 1000,	.logic_volt = 1300 * 1000},//1.325V/1.175V
   */	
-	{.frequency = 1608 * 1000,	.cpu_volt = 1425 * 1000,	.logic_volt = 1300 * 1000},//1.325V/1.175V
+	{.frequency = 1608 * 1000,	.cpu_volt = 1375 * 1000,	.logic_volt = 1300 * 1000},//1.325V/1.175V
+  /*	
+    // Omegamoon >>	1425 volt seems to be the maximum!
+  */	
 	{.frequency = CPUFREQ_TABLE_END},
 };
 

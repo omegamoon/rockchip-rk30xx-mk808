@@ -26,16 +26,10 @@
 #include <linux/timer.h>
 #include <mach/board.h>
 
-#define OMEGAMOON_CHANGED	1
-
-#ifdef OMEGAMOON_CHANGED
-#define DBG(x...)   printk(KERN_INFO "[BT_RFKILL]: "x)
-#else
 #if 0
 #define DBG(x...)   printk(KERN_INFO "[BT_RFKILL]: "x)
 #else
 #define DBG(x...)
-#endif
 #endif
 
 #define LOG(x...)   printk(KERN_INFO "[BT_RFKILL]: "x)
@@ -89,15 +83,15 @@
 /* IO configuration */
 // BT power pin
 #define BT_GPIO_POWER           RK30_PIN3_PC7
-#define IOMUX_BT_GPIO_POWER()     rk29_mux_api_set(GPIO3C7_SDMMC1WRITEPRT_NAME, GPIO3C_GPIO3C7);
+#define IOMUX_BT_GPIO_POWER()     rk30_mux_api_set(GPIO3C7_SDMMC1WRITEPRT_NAME, GPIO3C_GPIO3C7);
 
 // BT reset pin
 #define BT_GPIO_RESET           RK30_PIN3_PD1
-#define IOMUX_BT_GPIO_RESET()     rk29_mux_api_set(GPIO3D1_SDMMC1BACKENDPWR_NAME, GPIO3D_GPIO3D1);
+#define IOMUX_BT_GPIO_RESET()     rk30_mux_api_set(GPIO3D1_SDMMC1BACKENDPWR_NAME, GPIO3D_GPIO3D1);
 
 // BT wakeup pin
 #define BT_GPIO_WAKE_UP         RK30_PIN3_PC6
-#define IOMUX_BT_GPIO_WAKE_UP() rk29_mux_api_set(GPIO3C6_SDMMC1DETECTN_NAME, GPIO3C_GPIO3C6);
+#define IOMUX_BT_GPIO_WAKE_UP() rk30_mux_api_set(GPIO3C6_SDMMC1DETECTN_NAME, GPIO3C_GPIO3C6);
 
 // BT wakeup host pin
 #define BT_GPIO_WAKE_UP_HOST    RK30_PIN6_PA7
@@ -106,8 +100,8 @@
 
 //bt cts paired to uart rts
 #define UART_RTS                RK30_PIN1_PA3
-#define IOMUX_UART_RTS_GPIO()     rk29_mux_api_set(GPIO1A3_UART0RTSN_NAME, GPIO1A_GPIO1A3)
-#define IOMUX_UART_RTS()          rk29_mux_api_set(GPIO1A3_UART0RTSN_NAME, GPIO1A_UART0_RTS_N)
+#define IOMUX_UART_RTS_GPIO()     rk30_mux_api_set(GPIO1A3_UART0RTSN_NAME, GPIO1A_GPIO1A3)
+#define IOMUX_UART_RTS()          rk30_mux_api_set(GPIO1A3_UART0RTSN_NAME, GPIO1A_UART0_RTS_N)
 
 #endif
 
@@ -145,7 +139,6 @@ extern int rk29sdk_wifi_power_state;
 struct bt_ctrl gBtCtrl;
 struct timer_list bt_sleep_tl;
 
-void bcm4325_sleep(unsigned long bSleep);
 
 #if BT_WAKE_HOST_SUPPORT
 void resetBtHostSleepTimer(void)
@@ -176,6 +169,8 @@ static void timer_hostSleep(unsigned long arg)
 	DBG("b_HostWake=%d\n", gBtCtrl.b_HostWake);
     btWakeupHostUnlock();
 }
+
+void bcm4325_sleep(unsigned long bSleep);
 
 #ifdef CONFIG_PM
 static irqreturn_t bcm4329_wake_host_irq(int irq, void *dev)
@@ -255,19 +250,6 @@ static int bcm4329_rfkill_resume(struct platform_device *pdev)
 #define bcm4329_rfkill_resume  NULL
 #endif
 
-#else
-#ifdef CONFIG_PM
-static int bcm4329_rfkill_suspend(struct platform_device *pdev, pm_message_t state)
-{
-#ifdef CONFIG_BT_AUTOSLEEP
-    bcm4325_sleep(1);
-#endif
-    return 0;
-}
-#else
-#define bcm4329_rfkill_suspend  NULL
-#endif
-#define bcm4329_rfkill_resume  NULL
 #endif
 
 void bcm4325_sleep(unsigned long bSleep)
@@ -426,8 +408,10 @@ static struct platform_driver bcm4329_rfkill_driver = {
 		.name = "rk29sdk_rfkill", 
 		.owner = THIS_MODULE,
 	},	
+#if BT_WAKE_HOST_SUPPORT
     .suspend = bcm4329_rfkill_suspend,
     .resume = bcm4329_rfkill_resume,
+#endif
 };
 
 /*

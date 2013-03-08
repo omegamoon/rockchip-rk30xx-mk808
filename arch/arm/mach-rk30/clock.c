@@ -26,6 +26,8 @@
 #include <mach/dvfs.h>
 #include <linux/delay.h>
 
+#define OMEGAMOON_CHANGED	1
+
 #define CLOCK_PRINTK_DBG(fmt, args...) pr_debug(fmt, ## args);
 #define CLOCK_PRINTK_ERR(fmt, args...) pr_err(fmt, ## args);
 #define CLOCK_PRINTK_LOG(fmt, args...) pr_debug(fmt, ## args);
@@ -405,8 +407,23 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 	if (rate == clk->rate)
 		return 0;
 	if (clk->dvfs_info!=NULL&&is_support_dvfs(clk->dvfs_info))
+#ifdef OMEGAMOON_CHANGED
+	{
+		printk("Omegamoon >> %s called AND ROUTED THROUGH DVFS(!), setting frequency to %lu for '%s'\n", 
+				__func__, rate, clk->name);
+	}
+#else
 		return dvfs_set_rate(clk, rate);
+#endif
 
+#ifdef OMEGAMOON_CHANGED
+	/* 
+	// Omegamoon >> Enable this printk statement to see each speed change on the console
+	//              Be aware though, this produces lots of console output!
+	printk("Omegamoon >> %s called, setting frequency directly to %lu for '%s'\n", 
+			__func__, rate, clk->name);
+	*/
+#endif
 	LOCK();
 	ret = clk_set_rate_nolock(clk, rate);
 	UNLOCK();

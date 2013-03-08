@@ -24,3 +24,9 @@ Linux kernel release 3.x for Rockchip RK3066 - www.omegamoon.com
 - Merged with EasyPad 971 kernel snapshot (i97-8326-1.5)
 
 - Added forced display mode and resolution setting to fix 'Black screen'/'No signal' problem
+
+- Tweaked frequency table, adding frequencies 1.7GHz and 1.8GHz
+- Added IO schedulers: VR & SIO
+- Added Governors: SmartassV2(default), InteractiveX & SavagedZen
+- Disabled dvfs (Dynamic Voltage & Frequency Scaling)
+- Removed strange governor (OnDemand) dependencies

@@ -1,0 +1,4 @@
+TOOLCHAIN=./omegamoon/toolchain/arm-linux-androideabi-4.6/prebuilt/linux-x86/bin/arm-linux-androideabi-
+
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make mk808b_defconfig
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make -j6

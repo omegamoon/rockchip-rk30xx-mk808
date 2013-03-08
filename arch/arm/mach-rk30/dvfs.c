@@ -28,6 +28,8 @@
 #include <linux/io.h>
 #include <linux/hrtimer.h>
 
+#define OMEGAMOON_CHANGED	1
+
 #if 1
 #define DVFS_DBG(fmt, args...) {while(0);}
 #else
@@ -72,6 +74,10 @@ static int dump_dbg_map(char* buf);
 int dvfs_regulator_set_voltage_readback(struct regulator *regulator, int min_uV, int max_uV)
 {
 	int ret = 0, read_back = 0;
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called, min_uV=%d max_uV=%d\n", 
+			__func__, min_uV, max_uV);
+#endif
 	ret = dvfs_regulator_set_voltage(regulator, max_uV, max_uV);
 	if (ret < 0) {
 		DVFS_ERR("%s now read back to check voltage\n", __func__);
@@ -92,6 +98,10 @@ int dvfs_regulator_set_voltage_readback(struct regulator *regulator, int min_uV,
 struct regulator* dvfs_get_regulator(char *regulator_name)
 {
 	struct vd_node *vd;
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called, getting regulator named '%s'\n", 
+			__func__, regulator_name);
+#endif
 	list_for_each_entry(vd, &rk_dvfs_tree, node) {
 		if (strcmp(regulator_name, vd->regulator_name) == 0) {
 			return vd->regulator;
@@ -350,18 +360,33 @@ int clk_enable_dvfs(struct clk *clk)
 		return -1;
 	}
 	if (dvfs_clk->enable_dvfs == 0) {
+#ifdef OMEGAMOON_CHANGED
+		printk("Omegamoon >> %s called, trying to enable dvfs for clock named '%s'\n", 
+				__func__, dvfs_clk->name);
+#endif
 
 		if (IS_ERR_OR_NULL(dvfs_clk->vd->regulator)) {
 			//regulator = NULL;
-			if (dvfs_clk->vd->regulator_name)
+			if (dvfs_clk->vd->regulator_name) {
+#ifdef OMEGAMOON_CHANGED
+				printk("Omegamoon >> %s called, get regulator '%s' in voltage domain '%s'\n", 
+						__func__, dvfs_clk->vd->regulator_name, dvfs_clk->vd->name);
+#endif
 				dvfs_clk->vd->regulator = dvfs_regulator_get(NULL, dvfs_clk->vd->regulator_name);
+			}
 			if (!IS_ERR_OR_NULL(dvfs_clk->vd->regulator)) {
 				// DVFS_DBG("dvfs_regulator_get(%s)\n",dvfs_clk->vd->regulator_name);
 				dvfs_clk->vd->cur_volt = dvfs_regulator_get_voltage(dvfs_clk->vd->regulator);
 			} else {
 				//dvfs_clk->vd->regulator = NULL;
 				dvfs_clk->enable_dvfs = 0;
+#ifdef OMEGAMOON_CHANGED
+				DVFS_ERR("Omegamoon >> %s called, can't get regulator '%s' in voltage domain '%s' and with clock '%s'\n", 
+						 __func__, dvfs_clk->vd->regulator_name, dvfs_clk->vd->name, dvfs_clk->name);
+				dump_dvfs_map_on_console();
+#else
 				DVFS_ERR("%s can't get regulator in %s\n", dvfs_clk->name, __func__);
+#endif
 				return -1;
 			}
 		} else {
@@ -703,11 +728,15 @@ int check_volt_correct(int volt_old, int *volt_new, int volt_dep_old, int *volt_
 		int clk_biger_than_dep, int dep_biger_than_clk)
 {
 	int up_boundary = 0, low_boundary = 0;
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called, clk_biger_than_dep=%d dep_biger_than_clk=%d\n", 
+			__func__, clk_biger_than_dep, dep_biger_than_clk);
+#endif
 	DVFS_DBG("%d %d\n", clk_biger_than_dep, dep_biger_than_clk);
 	up_boundary = volt_old + dep_biger_than_clk;
 	low_boundary = volt_old - clk_biger_than_dep;
 	
-	if (volt_dep_old < low_boundary || volt_dep_old > up_boundary) {
+	if (volt_dep_old != 0 && (volt_dep_old < low_boundary || volt_dep_old > up_boundary)) {
 		DVFS_ERR("%s current volt out of bondary volt=%d(old=%d), volt_dep=%d(dep_old=%d), up_bnd=%d(dn=%d)\n",
 				__func__, *volt_new, volt_old, *volt_dep_new, volt_dep_old, up_boundary, low_boundary);
 		return -1;
@@ -716,8 +745,7 @@ int check_volt_correct(int volt_old, int *volt_new, int volt_dep_old, int *volt_
 	up_boundary = *volt_new + dep_biger_than_clk;
 	low_boundary = *volt_new - clk_biger_than_dep;
 	
-	if (*volt_dep_new < low_boundary || *volt_dep_new > up_boundary) {
-
+	if (volt_dep_new != 0 && (*volt_dep_new < low_boundary || *volt_dep_new > up_boundary)) {
 		if (*volt_dep_new < low_boundary) {
 			*volt_dep_new = low_boundary;
 			
@@ -739,12 +767,18 @@ int dvfs_scale_volt(struct vd_node *vd_clk, struct vd_node *vd_dep,
 	int volt_pre = 0, volt_dep_pre = 0;
 	int ret = 0;
 
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called, volt=%d(old=%d), volt_dep=%d(dep_old=%d)\n", __func__, volt_new, volt_old, volt_dep_new, volt_dep_old);
+#endif
 	DVFS_DBG("ENTER %s, volt=%d(old=%d), volt_dep=%d(dep_old=%d)\n", __func__, volt_new, volt_old, volt_dep_new, volt_dep_old);
 	regulator = vd_clk->regulator;
 	regulator_dep = vd_dep->regulator;
 
-	if (IS_ERR_OR_NULL(regulator) || IS_ERR(regulator_dep)) {	
-		DVFS_ERR("%s dvfs_clk->vd->regulator or depend->dep_vd->regulator == NULL\n", __func__);
+	if (IS_ERR_OR_NULL(regulator)) {
+		DVFS_ERR("%s dvfs_clk->vd->regulator == NULL\n", __func__);
+		return -1;
+	} else if (IS_ERR(regulator_dep)) {	
+		DVFS_ERR("%s depend->dep_vd->regulator == NULL\n", __func__);
 		return -1;
 	}
 
@@ -813,11 +847,19 @@ int dvfs_scale_volt(struct vd_node *vd_clk, struct vd_node *vd_dep,
 			goto fail;
 		}
 
+#ifdef OMEGAMOON_CHANGED
+		printk("\t\tNOW:Volt=%d, volt_dep=%d\n", volt, volt_dep);
+#endif
 		DVFS_DBG("\t\tNOW:Volt=%d, volt_dep=%d\n", volt, volt_dep);
 
 		if (vd_clk->cur_volt != volt) {
+#ifdef OMEGAMOON_CHANGED
+			ret = dvfs_regulator_set_voltage_readback(regulator, volt, volt);
+			udelay(5);
+#else
 			ret = dvfs_regulator_set_voltage_readback(regulator, volt, volt);
 			udelay(get_volt_up_delay(volt, volt_pre));
+#endif
 			if (ret < 0) {
 				DVFS_ERR("%s %s set voltage up err ret = %d, Vnew = %d(was %d)mV\n", 
 						__func__, vd_clk->name, ret, volt_new, volt_old);
@@ -827,8 +869,13 @@ int dvfs_scale_volt(struct vd_node *vd_clk, struct vd_node *vd_dep,
 		}
 
 		if (vd_dep->cur_volt != volt_dep) {
+#ifdef OMEGAMOON_CHANGED
+			ret = dvfs_regulator_set_voltage_readback(regulator_dep, volt_dep, volt_dep);
+			udelay(5);
+#else
 			ret = dvfs_regulator_set_voltage_readback(regulator_dep, volt_dep, volt_dep);
 			udelay(get_volt_up_delay(volt_dep, volt_dep_pre));
+#endif
 			if (ret < 0) {
 				DVFS_ERR("depend %s %s set voltage up err ret = %d, Vnew = %d(was %d)mV\n", 
 						__func__, vd_dep->name, ret, volt_dep_new, volt_dep_old);
@@ -906,6 +953,10 @@ int dvfs_scale_volt_bystep(struct vd_node *vd_clk, struct vd_node *vd_dep, int v
 	volt_old = vd_clk->cur_volt;
 	volt_dep_old = vd_dep->cur_volt;
 
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called, volt=%d(old=%d) vd_dep=%d(dep_old=%d)\n", __func__, 
+			volt_new, volt_old, volt_dep_new, volt_dep_old);
+#endif
 	DVFS_DBG("ENTER %s, volt=%d(old=%d) vd_dep=%d(dep_old=%d)\n", __func__, 
 			volt_new, volt_old, volt_dep_new, volt_dep_old);
 
@@ -992,6 +1043,10 @@ int dvfs_target_cpu(struct clk *clk, unsigned long rate_hz)
 		return -1;
 	}
 	dvfs_clk = clk_get_dvfs_info(clk);
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called, clk(%s) rate = %lu Hz\n", 
+			__func__, dvfs_clk->name, rate_hz);
+#endif
 	DVFS_DBG("enter %s: clk(%s) rate = %lu Hz\n", __func__, dvfs_clk->name, rate_hz);
 
 	if (!dvfs_clk || dvfs_clk->vd == NULL || IS_ERR_OR_NULL(dvfs_clk->vd->regulator)) {
@@ -1118,6 +1173,10 @@ int dvfs_target_core(struct clk *clk, unsigned long rate_hz)
 		return -1;
 	}
 	dvfs_clk = clk_get_dvfs_info(clk);
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called, clk(%s) rate = %lu Hz\n", 
+			__func__, dvfs_clk->name, rate_hz);
+#endif
 	DVFS_DBG("enter %s: clk(%s) rate = %lu Hz\n", __func__, dvfs_clk->name, rate_hz);
 
 	if (!dvfs_clk || dvfs_clk->vd == NULL || IS_ERR_OR_NULL(dvfs_clk->vd->regulator)) {
@@ -1220,12 +1279,30 @@ out:
  * rate must be raising sequence
  */
 static struct cpufreq_frequency_table cpu_dvfs_table[] = {
+#ifdef OMEGAMOON_CHANGED
+	{.frequency	=   48 * DVFS_KHZ, .index =  920 * DVFS_MV},
+	{.frequency	=  126 * DVFS_KHZ, .index =  970 * DVFS_MV},
+	{.frequency	=  252 * DVFS_KHZ, .index = 1025 * DVFS_MV},
+	{.frequency	=  504 * DVFS_KHZ, .index = 1025 * DVFS_MV},
+	{.frequency	=  816 * DVFS_KHZ, .index = 1050 * DVFS_MV},
+	{.frequency	= 1008 * DVFS_KHZ, .index = 1100 * DVFS_MV},
+	// Omegamoon >> Added frequencies matching those in board-rk30-box.c
+	{.frequency	= 1200 * DVFS_KHZ, .index = 1175 * DVFS_MV},
+	{.frequency	= 1272 * DVFS_KHZ, .index = 1225 * DVFS_MV},
+	{.frequency	= 1416 * DVFS_KHZ, .index = 1300 * DVFS_MV},
+	{.frequency	= 1512 * DVFS_KHZ, .index = 1350 * DVFS_MV},
+	{.frequency	= 1608 * DVFS_KHZ, .index = 1375 * DVFS_MV},
+	{.frequency	= 1704 * DVFS_KHZ, .index = 1400 * DVFS_MV},
+	{.frequency	= 1800 * DVFS_KHZ, .index = 1425 * DVFS_MV},
+    // Omegamoon >>	Beware, 1425 volt seems to be the maximum!
+#else
 	// {.frequency	= 48 * DVFS_KHZ, .index = 920*DVFS_MV},
 	// {.frequency	= 126 * DVFS_KHZ, .index	= 970 * DVFS_MV},
 	// {.frequency	= 252 * DVFS_KHZ, .index	= 1040 * DVFS_MV},
 	// {.frequency	= 504 * DVFS_KHZ, .index	= 1050 * DVFS_MV},
 	{.frequency	= 816 * DVFS_KHZ, .index	= 1050 * DVFS_MV},
 	// {.frequency	= 1008 * DVFS_KHZ, .index	= 1100 * DVFS_MV},
+#endif
 	{.frequency	= CPUFREQ_TABLE_END},
 };
 
@@ -1257,6 +1334,23 @@ static struct cpufreq_frequency_table peri_aclk_dvfs_table[] = {
 };
 
 static struct cpufreq_frequency_table dep_cpu2core_table[] = {
+#ifdef OMEGAMOON_CHANGED
+	{.frequency	=   48 * DVFS_KHZ, .index =  920 * DVFS_MV},
+	{.frequency	=  126 * DVFS_KHZ, .index =  970 * DVFS_MV},
+	{.frequency	=  252 * DVFS_KHZ, .index = 1050 * DVFS_MV},
+	{.frequency	=  504 * DVFS_KHZ, .index = 1100 * DVFS_MV},
+	{.frequency	=  816 * DVFS_KHZ, .index = 1150 * DVFS_MV},
+	{.frequency	= 1008 * DVFS_KHZ, .index = 1150 * DVFS_MV},
+	// Omegamoon >> Added frequencies matching those in board-rk30-box.c
+	{.frequency	= 1200 * DVFS_KHZ, .index = 1200 * DVFS_MV},
+	{.frequency	= 1272 * DVFS_KHZ, .index = 1200 * DVFS_MV},
+	{.frequency	= 1416 * DVFS_KHZ, .index = 1200 * DVFS_MV},
+	{.frequency	= 1512 * DVFS_KHZ, .index = 1250 * DVFS_MV},
+	{.frequency	= 1608 * DVFS_KHZ, .index = 1300 * DVFS_MV},
+	{.frequency	= 1704 * DVFS_KHZ, .index = 1300 * DVFS_MV},
+	{.frequency	= 1800 * DVFS_KHZ, .index = 1300 * DVFS_MV},
+    // Omegamoon >>	Beware, 1300 volt (logic) seems to be the maximum!
+#else
 	// {.frequency = 252 * DVFS_KHZ, .index    = 1025 * DVFS_MV},
 	// {.frequency = 504 * DVFS_KHZ, .index    = 1025 * DVFS_MV},
 	{.frequency = 816 * DVFS_KHZ, .index    = 1050 * DVFS_MV},//logic 1.050V
@@ -1266,6 +1360,7 @@ static struct cpufreq_frequency_table dep_cpu2core_table[] = {
 	// {.frequency = 1416 * DVFS_KHZ,.index    = 1100 * DVFS_MV},//logic 1.100V
 	// {.frequency = 1512 * DVFS_KHZ,.index    = 1125 * DVFS_MV},//logic 1.125V
 	// {.frequency = 1608 * DVFS_KHZ,.index    = 1175 * DVFS_MV},//logic 1.175V
+#endif
 	{.frequency	= CPUFREQ_TABLE_END},
 };
 
@@ -1400,7 +1495,11 @@ static struct clk_node rk30_clks[] = {
 }
 
 static struct depend_lookup rk30_depends[] = {
+//#ifdef OMEGAMOON_CHANGED
+//	RK_DEPPENDS("cpu", &vd_cpu, dep_cpu2core_table),
+//#else
 	RK_DEPPENDS("cpu", &vd_core, dep_cpu2core_table),
+//#endif
 	//RK_DEPPENDS("gpu", &vd_cpu, NULL),
 	//RK_DEPPENDS("gpu", &vd_cpu, NULL),
 };
@@ -1421,6 +1520,10 @@ int rk30_dvfs_init(void)
 		rk_regist_depends(&rk30_depends[i]);
 	}
 	dvfs_clk_cpu = dvfs_get_dvfs_clk_byname("cpu");
+#ifdef OMEGAMOON_CHANGED
+	printk("Omegamoon >> %s called\n", __func__);
+	dump_dvfs_map_on_console();
+#endif
 	return 0;
 }
 
@@ -1863,6 +1966,64 @@ subsys_initcall(dvfs_init);
 /**
  * dump_dbg_map() : Draw all informations of dvfs while debug
  */
+#ifdef OMEGAMOON_CHANGED
+void dump_dvfs_map_on_console(void)
+{
+	int i;
+	struct vd_node	*vd;
+	struct pd_node	*pd, *clkparent;
+	struct clk_list	*child;
+	struct clk_node	*dvfs_clk;
+	struct depend_list *depend;
+	
+	printk("-------------DVFS TREE-----------\n\n\n");
+	printk("RK30 DVFS TREE:\n");
+	list_for_each_entry(vd, &rk_dvfs_tree, node) {
+		printk("|\n|- voltage domain:%s\n", vd->name);
+		printk("|- current voltage:%d\n", vd->cur_volt);
+		printk("|- regulator:%s\n", vd->regulator_name);
+		list_for_each_entry(depend, &vd->req_volt_list, node2vd) {
+			printk("|- request voltage:%d, clk:%s\n", depend->req_volt, depend->dvfs_clk->name);
+		}
+
+		list_for_each_entry(pd, &vd->pd_list, node) {
+			printk("|  |\n|  |- power domain:%s, status = %s, current volt = %d\n",
+					pd->name, (pd->pd_status == PD_ON) ? "ON" : "OFF", pd->cur_volt);
+
+			list_for_each_entry(child, &pd->clk_list, node) {
+				dvfs_clk = child->dvfs_clk;
+				printk("|  |  |\n|  |  |- clock: %s current: rate %d, volt = %d, enable_dvfs = %s\n",
+						dvfs_clk->name, dvfs_clk->set_freq, dvfs_clk->set_volt, 
+						dvfs_clk->enable_dvfs == 0 ? "DISABLE" : "ENABLE");
+				for (i = 0; dvfs_clk->pds[i].pd != NULL; i++) {
+					clkparent = dvfs_clk->pds[i].pd;
+					printk("|  |  |  |- clock parents: %s, vd_parent = %s\n", 
+							clkparent->name, clkparent->vd->name);
+				}
+
+				for (i = 0; (dvfs_clk->dvfs_table[i].frequency != CPUFREQ_TABLE_END); i++) {
+					printk("|  |  |  |- freq = %d, volt = %d\n", 
+							dvfs_clk->dvfs_table[i].frequency, 
+							dvfs_clk->dvfs_table[i].index);
+
+				}
+
+				list_for_each_entry(depend, &dvfs_clk->depend_list, node2clk) {
+					printk("|  |  |  |  |- DEPEND VD: %s\n", depend->dep_vd->name); 
+					for (i = 0; (depend->dep_table[i].frequency != CPUFREQ_TABLE_END); i++) {
+						printk("|  |  |  |  |- freq = %d, req_volt = %d\n", 
+								depend->dep_table[i].frequency, 
+
+								depend->dep_table[i].index);
+					}
+				}
+			}
+		}
+	}
+	printk("-------------DVFS TREE END------------\n");
+}
+#endif
+
 static int dump_dbg_map(char *buf)
 {
 	int i;

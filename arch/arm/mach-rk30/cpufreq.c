@@ -11,7 +11,8 @@
  * GNU General Public License for more details.
  *
  */
-//#define DEBUG 1
+#define OMEGAMOON_CHANGED	1
+#define DEBUG 1
 #define pr_fmt(fmt) "cpufreq: " fmt
 #include <linux/clk.h>
 #include <linux/cpufreq.h>
@@ -31,12 +32,19 @@
 #include <linux/earlysuspend.h>
 #include <asm/unistd.h>
 #include <asm/uaccess.h>
+#ifdef OMEGAMOON_CHANGED
+//#define FREQ_PRINTK_DBG(fmt, args...) printk(pr_fmt(fmt), ## args)
+//#define FREQ_PRINTK_LOG(fmt, args...) printk(pr_fmt(fmt), ## args)
+#define FREQ_PRINTK_DBG(fmt, args...) do {} while(0)
+#define FREQ_PRINTK_LOG(fmt, args...) do {} while(0)
+#else
 #ifdef DEBUG
 #define FREQ_PRINTK_DBG(fmt, args...) pr_debug(fmt, ## args)
 #define FREQ_PRINTK_LOG(fmt, args...) pr_debug(fmt, ## args)
 #else
 #define FREQ_PRINTK_DBG(fmt, args...) do {} while(0)
 #define FREQ_PRINTK_LOG(fmt, args...) do {} while(0)
+#endif
 #endif
 #define FREQ_PRINTK_ERR(fmt, args...) pr_err(fmt, ## args)
 
@@ -68,7 +76,8 @@ static struct clk *cpu_gpll;
 static DEFINE_MUTEX(cpufreq_mutex);
 
 static struct clk *gpu_clk;
-#define GPU_MAX_RATE 350*1000*1000
+// Omegamoon >> Change gpu speed upper limit from 350 to 400
+#define GPU_MAX_RATE 400*1000*1000
 
 static int cpufreq_scale_rate_for_dvfs(struct clk *clk, unsigned long rate, dvfs_set_rate_callback set_rate);
 
@@ -86,10 +95,19 @@ static unsigned int rk30_getspeed(unsigned int cpu)
 
 static bool rk30_cpufreq_is_ondemand_policy(struct cpufreq_policy *policy)
 {
+#ifdef OMEGAMOON_CHANGED
+	/*
+	Omegamoon >>
+	Testing for the OnDemand governor policy has strange implications,
+	so just pretend that we're using some other exotic policy.
+	*/
+	return false;
+#else
 	char c = 0;
 	if (policy && policy->governor)
 		c = policy->governor->name[0];
 	return (c == 'o' || c == 'i' || c == 'c' || c == 'h');
+#endif
 }
 
 /**********************thermal limit**************************/
@@ -245,7 +263,10 @@ static int rk30_cpu_init(struct cpufreq_policy *policy)
 		if (IS_ERR(cpu_clk))
 			return PTR_ERR(cpu_clk);
 
+#ifndef OMEGAMOON_CHANGED
+		// Omegamoon >> Since dvfs doesn't work, disable time consuming callback
 		dvfs_clk_register_set_rate_callback(cpu_clk, cpufreq_scale_rate_for_dvfs);
+#endif
 		freq_table = dvfs_get_freq_volt_table(cpu_clk);
 		if (freq_table == NULL) {
 			freq_table = default_freq_table;
@@ -254,18 +275,25 @@ static int rk30_cpu_init(struct cpufreq_policy *policy)
 		for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
 			max_freq = max(max_freq, freq_table[i].frequency);
 		}
+#ifndef OMEGAMOON_CHANGED
+		// Omegamoon >> dvfs doesn't work at all, so don't try to enable it
 		clk_enable_dvfs(cpu_clk);
+#endif
 
 		/* Limit gpu frequency between 133M to 400M */
 #ifndef CONFIG_MACH_RK30_BOX_HOTDOG
+		// Omegamoon >> Just another hardcoded limit... it's ugly!
 		dvfs_clk_enable_limit(gpu_clk, 133000000, 400000000);
 #endif
 		freq_wq = create_singlethread_workqueue("rk30_cpufreqd");
+//#ifndef OMEGAMOON_CHANGED
+		// Omegamoon >> Let's disable this overhead
 #ifdef CONFIG_RK30_CPU_FREQ_LIMIT_BY_TEMP
 		if (rk30_cpufreq_is_ondemand_policy(policy)) {
 			queue_delayed_work(freq_wq, &rk30_cpufreq_temp_limit_work, 60*HZ);
 		}
 		cpufreq_register_notifier(&notifier_policy_block, CPUFREQ_POLICY_NOTIFIER);
+//#endif
 #endif
 #ifdef CPU_FREQ_DVFS_TST
 		queue_delayed_work(freq_wq, &rk30_cpufreq_dvsf_tst_work, msecs_to_jiffies(20 * 1000));
@@ -558,6 +586,7 @@ int cpufreq_scale_rate_for_dvfs(struct clk *clk, unsigned long rate, dvfs_set_ra
 	freqs.new = rate / 1000;
 	freqs.old = rk30_getspeed(0);
 
+	//get_online_cpus();
 	for_each_online_cpu(freqs.cpu) {
 		cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
 	}
@@ -580,6 +609,8 @@ int cpufreq_scale_rate_for_dvfs(struct clk *clk, unsigned long rate, dvfs_set_ra
 	for_each_online_cpu(freqs.cpu) {
 		cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
 	}
+	//put_online_cpus();
+	
 	return ret;
 
 }
@@ -622,6 +653,9 @@ static int rk30_target(struct cpufreq_policy *policy, unsigned int target_freq, 
 	if (new_rate == rk30_getspeed(0))
 		goto out;
 	ret = clk_set_rate(cpu_clk, new_rate * 1000);
+#ifdef OMEGAMOON_CHANGED
+	policy->cur = new_rate;
+#endif	
 out:
 	mutex_unlock(&cpufreq_mutex);
 	FREQ_PRINTK_DBG("cpureq set rate (%u) end\n", new_rate);
