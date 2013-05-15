@@ -17,3 +17,8 @@ Linux kernel release 3.x for Rockchip rk3x - www.omegamoon.com
 - Added android-ndk-r8c 4.6 toolchain
 - Added build scripts
 - Added linux flash tools + flash script for mk808 (use at own risk!)
+- Initial setup for generic rk3x boards (rk3066 and rk3188) 
+- Enabled serial debug console
+- Backport 3.0.8+ IPP, RemoteCtl, sound and display drivers
+- Added cpufreq governors and IO schedulers
+- Added Mali GPU Drivers
