@@ -1,0 +1,13 @@
+#
+# USB OTG infrastructure may be needed for peripheral-only, host-only,
+# or OTG-capable configurations when OTG transceivers or controllers
+# are used.
+#
+
+comment "SS801 USB Protocol Driver"
+
+config SS801_PROTOCOL_DRIVER
+	tristate "SS801 PROTOCOL DRIVER"
+        default n
+	help
+	  SS801 Protocol Driver

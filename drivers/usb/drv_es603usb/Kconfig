@@ -1,0 +1,13 @@
+#
+# USB OTG infrastructure may be needed for peripheral-only, host-only,
+# or OTG-capable configurations when OTG transceivers or controllers
+# are used.
+#
+
+comment "ES603 USB Protocol Driver"
+
+config ES603_PROTOCOL_DRIVER
+	tristate "ES603 PROTOCOL DRIVER"
+	default n
+	help
+	  ES603 Protocol Driver
