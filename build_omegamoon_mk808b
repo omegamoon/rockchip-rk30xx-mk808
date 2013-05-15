@@ -1,0 +1,8 @@
+#!/bin/bash
+
+THREADS="6"
+if [ "$1" != "" ]; then
+  THREADS="$1"
+fi
+
+./build_omegamoon_base $THREADS rk3066_mk808b_defconfig

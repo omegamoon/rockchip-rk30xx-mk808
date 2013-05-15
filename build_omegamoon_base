@@ -1,0 +1,32 @@
+#!/bin/bash
+
+THREADS="6"
+DEVICE="rk3066b_defconfig"
+TOOLCHAIN=./omegamoon/toolchain/arm-linux-androideabi-4.6/prebuilt/linux-x86/bin/arm-linux-androideabi-
+
+if [ "$1" != "" ]; then
+  THREADS="$1"
+fi
+
+if [ "$2" != "" ]; then
+  DEVICE="$2"
+fi
+
+echo -e "\n========================================="
+echo -e " Forced rebuild of Mali driver..."
+echo -e "=========================================\n"
+rm drivers/gpu/mali/ump/.*.cmd
+rm drivers/gpu/mali/ump/*.o
+rm drivers/gpu/mali/mali/.*.cmd
+rm drivers/gpu/mali/mali/*.o
+
+echo -e "\n========================================="
+echo -e " Configuring kernel for ${DEVICE}"
+echo -e "=========================================\n"
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make $DEVICE
+
+echo -e "\n========================================="
+echo -e " Building kernel for ${DEVICE} with ${THREADS} thread(s)"
+echo -e "=========================================\n"
+
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make -j$THREADS
