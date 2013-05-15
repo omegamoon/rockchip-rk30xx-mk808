@@ -33,6 +33,14 @@
 #include "hdmi/rk_hdmi.h"
 #include <linux/linux_logo.h>
 
+#ifdef CONFIG_MALI //IAM
+//#include "ump/ump_kernel_interface.h"
+
+#define FBIOPUT_SET_COLORKEY	0x5010 //IAM
+#define GET_UMP_SECURE_ID_BUF1 _IOWR('m', 310, unsigned int)
+#define GET_UMP_SECURE_ID_BUF2 _IOWR('m', 311, unsigned int)
+#endif
+
 void rk29_backlight_set(bool on);
 
 #ifdef	FB_WIMO_FLAG
@@ -61,7 +69,26 @@ defautl:we alloc three buffer,one for fb0 and fb2 display ui,one for ipp rotate
         pass the phy addr to fix.smem_start by ioctl
 ****************************************************************************/
 
+int get_fb_layer_id(struct fb_fix_screeninfo *fix)
+{
+	int layer_id;
+	if(!strcmp(fix->id,"fb1")||!strcmp(fix->id,"fb3"))
+	{
+		layer_id = 0;
+	}
+	else if(!strcmp(fix->id,"fb0")||!strcmp(fix->id,"fb2"))
+	{
+		layer_id = 1;
+	}
+	else
+	{
+		printk(KERN_ERR "unsupported %s",fix->id);
+		layer_id = -ENODEV;
+	}
 
+	return layer_id;
+}
+EXPORT_SYMBOL(get_fb_layer_id);
 
 /**********************************************************************
 this is for hdmi
@@ -224,6 +251,10 @@ static int rk_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
  	#endif
 	return 0;
 }
+#ifdef CONFIG_MALI  //IAM
+int (*disp_get_ump_secure_id)(struct fb_info *info, struct rk_fb_inf *g_fbi, unsigned long arg, int buf);
+EXPORT_SYMBOL(disp_get_ump_secure_id);
+#endif
 static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 {
 	struct fb_fix_screeninfo *fix = &info->fix;
@@ -234,7 +265,10 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 	int ovl;	//overlay:0 win1 on the top of win0;1,win0 on the top of win1
 	int num_buf; //buffer_number
 	void __user *argp = (void __user *)arg;
-	
+#ifdef CONFIG_MALI
+	struct rk_fb_inf *inf = dev_get_drvdata(info->device);
+	int secure_id_buf_num = 0; 
+#endif
 	switch(cmd)
 	{
  		case FBIOPUT_FBPHYADD:
@@ -274,6 +308,20 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 			dev_drv->num_buf = num_buf;
 			printk("rk fb use %d buffers\n",num_buf);
 			break;
+#ifdef CONFIG_MALI /*//IAM*/
+		case GET_UMP_SECURE_ID_BUF2: /* flow trough */
+			secure_id_buf_num = 1;
+		case GET_UMP_SECURE_ID_BUF1:
+			{
+				if (!disp_get_ump_secure_id)
+					request_module("disp_ump");
+				if (disp_get_ump_secure_id)
+					return disp_get_ump_secure_id(info, inf, arg,
+												  secure_id_buf_num);
+				else
+					return -ENOTSUPP;
+			}
+#endif
 		case FBIOGET_SCREEN_STATE:
 		case FBIOPUT_SET_CURSOR_EN:
 		case FBIOPUT_SET_CURSOR_POS:
@@ -333,8 +381,10 @@ static int rk_fb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	
 	if( 0==var->xres_virtual || 0==var->yres_virtual ||
-		 0==var->xres || 0==var->yres || var->xres<16 ||
-		 ((16!=var->bits_per_pixel)&&(32!=var->bits_per_pixel)) )
+//IAM		 0==var->xres || 0==var->yres || var->xres<16 ||
+		 0==var->yres || var->xres<16 ||
+//		 ((16!=var->bits_per_pixel)&&(32!=var->bits_per_pixel)) )
+		 ((16!=var->bits_per_pixel)&&(24!=var->bits_per_pixel)&&(32!=var->bits_per_pixel)) )  //olegk0 adds 24bpp
 	 {
 		 printk("%s check var fail 1!!! \n",info->fix.id);
 		 printk("xres_vir:%d>>yres_vir:%d\n", var->xres_virtual,var->yres_virtual);
@@ -855,10 +905,14 @@ static int rk_request_fb_buffer(struct fb_info *fbi,int fb_id)
 	struct rk_fb_inf *fb_inf = platform_get_drvdata(g_fb_pdev);
 	if (!strcmp(fbi->fix.id,"fb0"))
 	{
-		res = platform_get_resource_byname(g_fb_pdev, IORESOURCE_MEM, "fb0 buf");
+		// Omegamoon : Set as configured in board-rk30-omegamoon.c
+		//res = platform_get_resource_byname(g_fb_pdev, IORESOURCE_MEM, "fb0 buf");
+        res = platform_get_resource_byname(g_fb_pdev, IORESOURCE_MEM, "ipp buf");
 		if (res == NULL)
 		{
-			dev_err(&g_fb_pdev->dev, "failed to get memory for fb0 \n");
+			// Omegamoon >> Make the error match the device name
+			// dev_err(&g_fb_pdev->dev, "failed to get memory for fb0 \n");
+			dev_err(&g_fb_pdev->dev, "failed to get memory for ipp \n");
 			ret = -ENOENT;
 		}
 		fbi->fix.smem_start = res->start;

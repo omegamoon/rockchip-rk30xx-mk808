@@ -250,7 +250,13 @@ struct rk_fb_inf {
 	int video_mode;  //when play video set it to 1
 	struct workqueue_struct *workqueue;
 	struct delayed_work delay_work;
+#ifdef CONFIG_MALI
+void * ump_wrapped_buffer[RK_MAX_FB_SUPPORT][2]; //IAM
+#endif	
 };
+#ifdef CONFIG_MALI
+extern int (*disp_get_ump_secure_id)(struct fb_info *info, struct rk_fb_inf *g_fbi, unsigned long arg, int buf);
+#endif
 extern int rk_fb_register(struct rk_lcdc_device_driver *dev_drv,
 	struct rk_lcdc_device_driver *def_drv,int id);
 extern int rk_fb_unregister(struct rk_lcdc_device_driver *dev_drv);

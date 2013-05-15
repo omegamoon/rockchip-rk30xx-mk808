@@ -1,0 +1,38 @@
+#
+# Copyright (C) 2010, 2012 ARM Limited. All rights reserved.
+# 
+# This program is free software and is provided to you under the terms of the GNU General Public License version 2
+# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# 
+# A copy of the licence is included with the program, and can also be obtained from Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+MALI400_COMPILER_MIDDLE_DIR ?= .
+
+
+MALI400_COMPILER_MIDDLE_TEST_SRCS = \
+	$(MALI400_COMPILER_MIDDLE_DIR)/dominator.c
+
+MALI400_COMPILER_MIDDLE_NOTEST_SRCS = \
+	$(MALI400_COMPILER_MIDDLE_DIR)/make_basic_blocks.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/middle.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/control_deps.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/optimise_cse.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/optimise_loop_entry.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/optimise_inline_functions.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/optimise_basic_blocks.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/optimise_constant_fold.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/eliminate_complex_ops.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/remove_dead_code.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/ssa.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/conditional_select.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/rewrite_sampler_accesses.c \
+	$(MALI400_COMPILER_MIDDLE_DIR)/expand_builtin_functions.rw \
+	$(MALI400_COMPILER_MIDDLE_DIR)/optimise_vector_ops.rw \
+
+
+
+MALI400_COMPILER_SRCS += $(MALI400_COMPILER_MIDDLE_TEST_SRCS) $(MALI400_COMPILER_MIDDLE_NOTEST_SRCS)
+TEST_SRCS += $(MALI400_COMPILER_MIDDLE_TEST_SRCS)
+SHADERGEN_SRCS += $(MALI400_COMPILER_MIDDLE_DIR)/remove_dead_code.c

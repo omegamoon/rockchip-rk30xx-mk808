@@ -1,0 +1,343 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\lc.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)VSBuild\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
+    <OutDir>$(SolutionDir)VSBuild\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBMALI400SC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;.\softfloat;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+    </ClCompile>
+    <Link>
+      <TargetMachine>MachineX86</TargetMachine>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <PreBuildEvent>
+    <Command>"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "middle\expand_builtin_functions.rw" "middle\expand_builtin_functions.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "middle\optimise_vector_ops.rw" "middle\optimise_vector_ops.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "maligp2\maligp2_preschedule.rw" "maligp2\maligp2_preschedule.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "maligp2\maligp2_scheduler.rw" "maligp2\maligp2_scheduler.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "mali200\mali200_preschedule.rw" "mali200\mali200_preschedule.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "mali200\mali200_scheduler.rw" "mali200\mali200_scheduler.c"</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>Generating .c files</Message>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;LIBMALI400SC_EXPORTS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>. ; .\softfloat;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <TargetMachine>MachineX86</TargetMachine>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+    <PreBuildEvent>
+      <Command>"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "middle\expand_builtin_functions.rw" "middle\expand_builtin_functions.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "middle\optimise_vector_ops.rw" "middle\optimise_vector_ops.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "maligp2\maligp2_preschedule.rw" "maligp2\maligp2_preschedule.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "maligp2\maligp2_scheduler.rw" "maligp2\maligp2_scheduler.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "mali200\mali200_preschedule.rw" "mali200\mali200_preschedule.c"
+"$(SolutionDir)$(ConfigurationName)\rewritegen.exe" "mali200\mali200_scheduler.rw" "mali200\mali200_scheduler.c"</Command>
+      <Message>Generating .c files</Message>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="backend\abstract_scheduler.c" />
+    <ClCompile Include="backend\address_allocator.c" />
+    <ClCompile Include="backend\arithmetic.c" />
+    <ClCompile Include="backend\eliminate_phi_nodes.c" />
+    <ClCompile Include="backend\extra_info.c" />
+    <ClCompile Include="backend\graph_coloring.c" />
+    <ClCompile Include="backend\instruction.c" />
+    <ClCompile Include="backend\interference_graph.c" />
+    <ClCompile Include="backend\liveness.c" />
+    <ClCompile Include="backend\liveness_printer.c" />
+    <ClCompile Include="backend\relocation.c" />
+    <ClCompile Include="backend\reservation.c" />
+    <ClCompile Include="backend\serializer.c" />
+    <ClCompile Include="backend\static_cycle_count.c" />
+    <ClCompile Include="commandline.c" />
+    <ClCompile Include="common\basic_block.c" />
+    <ClCompile Include="common\compiler_options.c" />
+    <ClCompile Include="common\error_reporting.c" />
+    <ClCompile Include="common\essl_common.c" />
+    <ClCompile Include="common\essl_dict.c" />
+    <ClCompile Include="common\essl_list.c" />
+    <ClCompile Include="common\essl_mem.c" />
+    <ClCompile Include="common\essl_node.c" />
+    <ClCompile Include="common\essl_profiling.c" />
+    <ClCompile Include="common\essl_random.c" />
+    <ClCompile Include="common\essl_str.c" />
+    <ClCompile Include="common\essl_stringbuffer.c" />
+    <ClCompile Include="common\essl_target.c" />
+    <ClCompile Include="common\essl_test_system.c" />
+    <ClCompile Include="common\essl_type.c" />
+    <ClCompile Include="common\essl_vector.c" />
+    <ClCompile Include="common\find_blocks_for_operations.c" />
+    <ClCompile Include="common\general_dict.c" />
+    <ClCompile Include="common\middle_printer.c" />
+    <ClCompile Include="common\output_buffer.c" />
+    <ClCompile Include="common\priority_queue.c" />
+    <ClCompile Include="common\ptrdict.c" />
+    <ClCompile Include="common\ptrset.c" />
+    <ClCompile Include="common\symbol_table.c" />
+    <ClCompile Include="common\type_name.c" />
+    <ClCompile Include="common\unique_names.c" />
+    <ClCompile Include="compiler.c" />
+    <ClCompile Include="driver.c" />
+    <ClCompile Include="frontend\callgraph.c" />
+    <ClCompile Include="frontend\constant_fold.c" />
+    <ClCompile Include="frontend\data_type.c" />
+    <ClCompile Include="frontend\frontend.c" />
+    <ClCompile Include="frontend\global_variable_inlining.c" />
+    <ClCompile Include="frontend\lang.c" />
+    <ClCompile Include="frontend\parser.c" />
+    <ClCompile Include="frontend\precision.c" />
+    <ClCompile Include="frontend\preprocessor.c" />
+    <ClCompile Include="frontend\scanner.c" />
+    <ClCompile Include="frontend\typecheck.c" />
+    <ClCompile Include="mali200\mali200_driver.c" />
+    <ClCompile Include="mali200\mali200_emit.c" />
+    <ClCompile Include="mali200\mali200_entry_point.c" />
+    <ClCompile Include="mali200\mali200_external_implementation.c" />
+    <ClCompile Include="mali200\mali200_instruction.c" />
+    <ClCompile Include="mali200\mali200_liveness.c" />
+    <ClCompile Include="mali200\mali200_preschedule.c" />
+    <ClCompile Include="mali200\mali200_printer.c" />
+    <ClCompile Include="mali200\mali200_regalloc.c" />
+    <ClCompile Include="mali200\mali200_register_integration.c" />
+    <ClCompile Include="mali200\mali200_relocation.c" />
+    <ClCompile Include="mali200\mali200_scheduler.c" />
+    <ClCompile Include="mali200\mali200_slot.c" />
+    <ClCompile Include="mali200\mali200_spilling.c" />
+    <ClCompile Include="mali200\mali200_target.c" />
+    <ClCompile Include="mali200\mali200_type.c" />
+    <ClCompile Include="mali200\mali200_word_insertion.c" />
+    <ClCompile Include="mali200\mali200_word_splitting.c" />
+    <ClCompile Include="maligp2\maligp2_bypass.c" />
+    <ClCompile Include="maligp2\maligp2_constant_register_interference.c" />
+    <ClCompile Include="maligp2\maligp2_constant_register_spilling.c" />
+    <ClCompile Include="maligp2\maligp2_driver.c" />
+    <ClCompile Include="maligp2\maligp2_emit.c" />
+    <ClCompile Include="maligp2\maligp2_entry_point.c" />
+    <ClCompile Include="maligp2\maligp2_instruction.c" />
+    <ClCompile Include="maligp2\maligp2_liveness.c" />
+    <ClCompile Include="maligp2\maligp2_preschedule.c" />
+    <ClCompile Include="maligp2\maligp2_printer.c" />
+    <ClCompile Include="maligp2\maligp2_regalloc.c" />
+    <ClCompile Include="maligp2\maligp2_reg_loadstore.c" />
+    <ClCompile Include="maligp2\maligp2_relocation.c" />
+    <ClCompile Include="maligp2\maligp2_scheduler.c" />
+    <ClCompile Include="maligp2\maligp2_slot.c" />
+    <ClCompile Include="maligp2\maligp2_target.c" />
+    <ClCompile Include="maligp2\maligp2_virtual_regs.c" />
+    <ClCompile Include="middle\conditional_select.c" />
+    <ClCompile Include="middle\control_deps.c" />
+    <ClCompile Include="middle\dominator.c" />
+    <ClCompile Include="middle\eliminate_complex_ops.c" />
+    <ClCompile Include="middle\expand_builtin_functions.c" />
+    <ClCompile Include="middle\make_basic_blocks.c" />
+    <ClCompile Include="middle\middle.c" />
+    <ClCompile Include="middle\rewrite_sampler_accesses.c" />
+    <ClCompile Include="middle\optimise_basic_blocks.c" />
+    <ClCompile Include="middle\optimise_constant_fold.c" />
+    <ClCompile Include="middle\optimise_cse.c" />
+    <ClCompile Include="middle\optimise_inline_functions.c" />
+    <ClCompile Include="middle\optimise_loop_entry.c" />
+    <ClCompile Include="middle\optimise_vector_ops.c" />
+    <ClCompile Include="middle\remove_dead_code.c" />
+    <ClCompile Include="middle\ssa.c" />
+    <ClCompile Include="softfloat\softfloat.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="backend\abstract_scheduler.h" />
+    <ClInclude Include="backend\address_allocator.h" />
+    <ClInclude Include="backend\arithmetic.h" />
+    <ClInclude Include="backend\eliminate_phi_nodes.h" />
+    <ClInclude Include="backend\extra_info.h" />
+    <ClInclude Include="backend\graph_coloring.h" />
+    <ClInclude Include="backend\instruction.h" />
+    <ClInclude Include="backend\interference_graph.h" />
+    <ClInclude Include="backend\liveness.h" />
+    <ClInclude Include="backend\liveness_printer.h" />
+    <ClInclude Include="backend\relocation.h" />
+    <ClInclude Include="backend\reservation.h" />
+    <ClInclude Include="backend\serializer.h" />
+    <ClInclude Include="backend\static_cycle_count.h" />
+    <ClInclude Include="commandline.h" />
+    <ClInclude Include="common\basic_block.h" />
+    <ClInclude Include="common\compiler_options.h" />
+    <ClInclude Include="common\compiler_option_definitions.h" />
+    <ClInclude Include="common\error_codes.h" />
+    <ClInclude Include="common\error_names.h" />
+    <ClInclude Include="common\error_reporting.h" />
+    <ClInclude Include="common\essl_common.h" />
+    <ClInclude Include="common\essl_dict.h" />
+    <ClInclude Include="common\essl_list.h" />
+    <ClInclude Include="common\essl_mem.h" />
+    <ClInclude Include="common\essl_node.h" />
+    <ClInclude Include="common\essl_profiling.h" />
+    <ClInclude Include="common\essl_random.h" />
+    <ClInclude Include="common\essl_str.h" />
+    <ClInclude Include="common\essl_stringbuffer.h" />
+    <ClInclude Include="common\essl_symbol.h" />
+    <ClInclude Include="common\essl_system.h" />
+    <ClInclude Include="common\essl_target.h" />
+    <ClInclude Include="common\essl_test_system.h" />
+    <ClInclude Include="common\essl_type.h" />
+    <ClInclude Include="common\essl_vector.h" />
+    <ClInclude Include="common\find_blocks_for_operations.h" />
+    <ClInclude Include="common\general_dict.h" />
+    <ClInclude Include="common\middle_printer.h" />
+    <ClInclude Include="common\output_buffer.h" />
+    <ClInclude Include="common\priority_queue.h" />
+    <ClInclude Include="common\ptrdict.h" />
+    <ClInclude Include="common\ptrset.h" />
+    <ClInclude Include="common\scalar.h" />
+    <ClInclude Include="common\symbol_table.h" />
+    <ClInclude Include="common\translation_unit.h" />
+    <ClInclude Include="common\type_name.h" />
+    <ClInclude Include="common\unique_names.h" />
+    <ClInclude Include="compiler.h" />
+    <ClInclude Include="compiler_context.h" />
+    <ClInclude Include="compiler_internal.h" />
+    <ClInclude Include="compiler_version.h" />
+    <ClInclude Include="frontend\builtin_function_data.h" />
+    <ClInclude Include="frontend\callgraph.h" />
+    <ClInclude Include="frontend\constant_fold.h" />
+    <ClInclude Include="frontend\data_type.h" />
+    <ClInclude Include="frontend\frontend.h" />
+    <ClInclude Include="frontend\global_variable_inlining.h" />
+    <ClInclude Include="frontend\lang.h" />
+    <ClInclude Include="frontend\parser.h" />
+    <ClInclude Include="frontend\precision.h" />
+    <ClInclude Include="frontend\preprocessor.h" />
+    <ClInclude Include="frontend\scanner.h" />
+    <ClInclude Include="frontend\token.h" />
+    <ClInclude Include="frontend\token_names.h" />
+    <ClInclude Include="frontend\typecheck.h" />
+    <ClInclude Include="mali200\mali200_driver.h" />
+    <ClInclude Include="mali200\mali200_emit.h" />
+    <ClInclude Include="mali200\mali200_entry_point.h" />
+    <ClInclude Include="mali200\mali200_external.h" />
+    <ClInclude Include="mali200\mali200_external_implementation.h" />
+    <ClInclude Include="mali200\mali200_instruction.h" />
+    <ClInclude Include="mali200\mali200_liveness.h" />
+    <ClInclude Include="mali200\mali200_preschedule.h" />
+    <ClInclude Include="mali200\mali200_printer.h" />
+    <ClInclude Include="mali200\mali200_regalloc.h" />
+    <ClInclude Include="mali200\mali200_register_integration.h" />
+    <ClInclude Include="mali200\mali200_relocation.h" />
+    <ClInclude Include="mali200\mali200_scheduler.h" />
+    <ClInclude Include="mali200\mali200_slot.h" />
+    <ClInclude Include="mali200\mali200_spilling.h" />
+    <ClInclude Include="mali200\mali200_target.h" />
+    <ClInclude Include="mali200\mali200_type.h" />
+    <ClInclude Include="mali200\mali200_word_insertion.h" />
+    <ClInclude Include="mali200\mali200_word_splitting.h" />
+    <ClInclude Include="maligp2\maligp2_bypass.h" />
+    <ClInclude Include="maligp2\maligp2_constant_register_interference.h" />
+    <ClInclude Include="maligp2\maligp2_constant_register_spilling.h" />
+    <ClInclude Include="maligp2\maligp2_driver.h" />
+    <ClInclude Include="maligp2\maligp2_emit.h" />
+    <ClInclude Include="maligp2\maligp2_entry_point.h" />
+    <ClInclude Include="maligp2\maligp2_instruction.h" />
+    <ClInclude Include="maligp2\maligp2_liveness.h" />
+    <ClInclude Include="maligp2\maligp2_preschedule.h" />
+    <ClInclude Include="maligp2\maligp2_printer.h" />
+    <ClInclude Include="maligp2\maligp2_regalloc.h" />
+    <ClInclude Include="maligp2\maligp2_reg_loadstore.h" />
+    <ClInclude Include="maligp2\maligp2_relocation.h" />
+    <ClInclude Include="maligp2\maligp2_scheduler.h" />
+    <ClInclude Include="maligp2\maligp2_slot.h" />
+    <ClInclude Include="maligp2\maligp2_target.h" />
+    <ClInclude Include="maligp2\maligp2_virtual_regs.h" />
+    <ClInclude Include="middle\conditional_select.h" />
+    <ClInclude Include="middle\control_deps.h" />
+    <ClInclude Include="middle\dominator.h" />
+    <ClInclude Include="middle\eliminate_complex_ops.h" />
+    <ClInclude Include="middle\expand_builtin_functions.h" />
+    <ClInclude Include="middle\make_basic_blocks.h" />
+    <ClInclude Include="middle\middle.h" />
+    <ClInclude Include="middle\optimise_basic_blocks.h" />
+    <ClInclude Include="middle\optimise_constant_fold.h" />
+    <ClInclude Include="middle\optimise_cse.h" />
+    <ClInclude Include="middle\optimise_inline_functions.h" />
+    <ClInclude Include="middle\optimise_loop_entry.h" />
+    <ClInclude Include="middle\optimise_vector_ops.h" />
+    <ClInclude Include="middle\remove_dead_code.h" />
+    <ClInclude Include="middle\ssa.h" />
+    <ClInclude Include="rewritegen\aliases.h" />
+    <ClInclude Include="rewritegen\ast.h" />
+    <ClInclude Include="rewritegen\driver.h" />
+    <ClInclude Include="rewritegen\output.h" />
+    <ClInclude Include="rewritegen\parser.hpp" />
+    <ClInclude Include="shadergen_state.h" />
+    <ClInclude Include="softfloat\softfloat.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="mali200\mali200_preschedule.rw" />
+    <None Include="mali200\mali200_scheduler.rw" />
+    <None Include="maligp2\maligp2_preschedule.rw" />
+    <None Include="maligp2\maligp2_scheduler.rw" />
+    <None Include="middle\expand_builtin_functions.rw" />
+    <None Include="middle\optimise_vector_ops.rw" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\lc.targets" />
+  </ImportGroup>
+</Project>

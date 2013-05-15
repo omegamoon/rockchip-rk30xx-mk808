@@ -1,0 +1,52 @@
+# This confidential and proprietary software may be used only as
+# authorised by a licensing agreement from ARM Limited
+# (C) COPYRIGHT 2010-2011 ARM Limited
+# ALL RIGHTS RESERVED
+# The entire notice above must be reproduced on all authorised
+# copies and copies may only be made to the extent permitted
+# by a licensing agreement from ARM Limited.
+
+import os
+Import('env')
+
+# Generate a build environment for the integration tests, taking a copy of the top-level build environment 
+# (env) as a start. This environment is then passed to the varius unit test's
+# sconscripts:
+
+x11_env = env.Clone()
+x11_env.Append( CPPPATH = ['#x11/thirdparty/include',
+                           '#x11/thirdparty/include/xorg',
+                           '#x11/thirdparty/include/pixman-1',
+                           '#x11/thirdparty/include/libdrm',
+                           '#x11/mali_drv'
+                         ],
+                CPPDEFINES = {'USE_TRACING': '1'}
+              )
+
+# Xorg uses C++ style comments and 'inline' keyword
+if '-std=c89' in x11_env['CFLAGS']:
+	x11_env['CFLAGS'].remove('-std=c89')
+
+if '-pedantic' in x11_env['CCFLAGS']:
+	x11_env['CCFLAGS'].remove('-pedantic')
+
+# X11 generates a lot of warnings
+if '-Werror' in x11_env['CCFLAGS']:
+	x11_env['CCFLAGS'].remove('-Werror')
+
+# We want to keep undefined references (we can't link against Xorg)
+x11_env['_LIBFLAGS'] = x11_env['_LIBFLAGS'].replace('-Wl,--no-undefined ','')
+
+#remove the 'lib'prefix
+x11_env['LIBPREFIX'] = ''
+
+objs = x11_env.SharedObject(Glob('*.c'))
+objs = SConscript('src/sconscript', exports='x11_env')
+
+x11_shared_lib = x11_env.SharedLibrary(target  = '$SHARED_LIB_PATH/mali_drv',
+                                   source  = objs,
+                                   LIBS    = ['pthread', 'mali'],
+                                   RPATH   = ['$SHARED_LIB_PATH'],
+                                   LIBPATH = ['$SHARED_LIB_PATH'])
+
+env.LibTarget('x11', x11_shared_lib)

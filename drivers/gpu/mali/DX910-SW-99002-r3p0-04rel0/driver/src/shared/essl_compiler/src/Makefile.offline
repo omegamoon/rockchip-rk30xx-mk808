@@ -1,0 +1,44 @@
+#
+# Copyright (C) 2012 ARM Limited. All rights reserved.
+# 
+# This program is free software and is provided to you under the terms of the GNU General Public License version 2
+# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# 
+# A copy of the licence is included with the program, and can also be obtained from Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+
+MALI400_CPPFLAGS += -I$(MALI400_COMPILER_SRC_DIR)
+MALI400_CPPFLAGS += -I$(MALI400_COMPILER_SRC_DIR)/softfloat
+
+MALI400_COMPILER_COMMON_DIR=$(MALI400_COMPILER_SRC_DIR)/common
+include $(MALI400_COMPILER_COMMON_DIR)/Makefile.offline
+
+MALI400_COMPILER_FRONTEND_DIR=$(MALI400_COMPILER_SRC_DIR)/frontend
+include $(MALI400_COMPILER_FRONTEND_DIR)/Makefile.offline
+
+MALI400_COMPILER_SOFTFLOAT_DIR=$(MALI400_COMPILER_SRC_DIR)/softfloat
+include $(MALI400_COMPILER_SOFTFLOAT_DIR)/Makefile.offline
+
+MALI400_COMPILER_BACKEND_DIR=$(MALI400_COMPILER_SRC_DIR)/backend
+include $(MALI400_COMPILER_BACKEND_DIR)/Makefile.offline
+
+MALI400_COMPILER_MIDDLE_DIR=$(MALI400_COMPILER_SRC_DIR)/middle
+include $(MALI400_COMPILER_MIDDLE_DIR)/Makefile.offline
+
+MALI400_COMPILER_MALI200_DIR=$(MALI400_COMPILER_SRC_DIR)/mali200
+include $(MALI400_COMPILER_MALI200_DIR)/Makefile.offline
+
+MALI400_COMPILER_MALIGP2_DIR=$(MALI400_COMPILER_SRC_DIR)/maligp2
+include $(MALI400_COMPILER_MALIGP2_DIR)/Makefile.offline
+
+ifeq ($(shell test -e $(MALI400_COMPILER_SRC_DIR)/rewritegen && echo yes),yes)
+REWRITEGEN_DIR=$(MALI400_COMPILER_SRC_DIR)/rewritegen
+include $(REWRITEGEN_DIR)/Makefile.offline
+endif
+
+MALI400_COMPILER_SRCS += $(MALI400_COMPILER_COMMON_DIR)/essl_test_system.c
+MALI400_COMPILER_SRCS += $(MALI400_COMPILER_SRC_DIR)/driver.c
+MALI400_COMPILER_SRCS += $(MALI400_COMPILER_SRC_DIR)/compiler.c
+MALI400_COMPILER_SRCS += $(MALI400_COMPILER_SRC_DIR)/commandline.c

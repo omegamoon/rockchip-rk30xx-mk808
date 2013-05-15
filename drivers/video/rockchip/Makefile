@@ -6,3 +6,9 @@ obj-$(CONFIG_LCDC_RK3066B) += lcdc/rk3066b_lcdc.o
 obj-$(CONFIG_RGA_RK30) += rga/
 obj-$(CONFIG_RK_HDMI) += hdmi/
 obj-$(CONFIG_RK_LVDS) += lvds/
+# Omegamoon >> Added Mali support
+EXTRA_CFLAGS += -DCONFIG_FB_WORK_IPP
+ifneq ($(CONFIG_UMP),)
+obj-m += disp_ump.o
+EXTRA_CFLAGS += -Idrivers/gpu/mali/include
+endif

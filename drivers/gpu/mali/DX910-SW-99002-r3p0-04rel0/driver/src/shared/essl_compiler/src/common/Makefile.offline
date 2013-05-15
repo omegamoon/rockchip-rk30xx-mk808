@@ -1,0 +1,61 @@
+#
+# Copyright (C) 2010, 2012 ARM Limited. All rights reserved.
+# 
+# This program is free software and is provided to you under the terms of the GNU General Public License version 2
+# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# 
+# A copy of the licence is included with the program, and can also be obtained from Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+MALI400_COMPILER_COMMON_DIR ?= .
+
+MALI400_COMPILER_COMMON_TEST_SRCS = \
+	$(MALI400_COMPILER_COMMON_DIR)/error_reporting.c  \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_dict.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_list.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_mem.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_str.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_vector.c \
+	$(MALI400_COMPILER_COMMON_DIR)/general_dict.c \
+	$(MALI400_COMPILER_COMMON_DIR)/priority_queue.c \
+	$(MALI400_COMPILER_COMMON_DIR)/ptrdict.c \
+	$(MALI400_COMPILER_COMMON_DIR)/ptrset.c \
+	$(MALI400_COMPILER_COMMON_DIR)/symbol_table.c \
+
+
+MALI400_COMPILER_COMMON_NOTEST_SRCS = \
+	$(MALI400_COMPILER_COMMON_DIR)/basic_block.c \
+	$(MALI400_COMPILER_COMMON_DIR)/compiler_options.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_common.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_node.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_profiling.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_stringbuffer.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_target.c \
+	$(MALI400_COMPILER_COMMON_DIR)/essl_type.c \
+	$(MALI400_COMPILER_COMMON_DIR)/find_blocks_for_operations.c \
+	$(MALI400_COMPILER_COMMON_DIR)/output_buffer.c \
+	$(MALI400_COMPILER_COMMON_DIR)/type_name.c \
+	$(MALI400_COMPILER_COMMON_DIR)/unique_names.c \
+
+MALI400_COMPILER_COMMON_DEBUG_SRCS =
+
+ifneq ($(call is-feature-enabled,timeprof),)
+	MALI400_COMPILER_COMMON_NOTEST_SRCS += $(MALI400_COMPILER_COMMON_DIR)/middle_printer.c
+else
+	MALI400_COMPILER_COMMON_DEBUG_SRCS += $(MALI400_COMPILER_COMMON_DIR)/middle_printer.c
+endif
+
+MALI400_COMMON_NOT_IN_SHADERGEN = \
+	$(MALI400_COMPILER_COMMON_DIR)/target.c
+
+ifneq ($(call is-feature-enabled,randomized),)
+	MALI400_COMPILER_COMMON_NOTEST_SRCS += $(MALI400_COMPILER_COMMON_DIR)/essl_random.c
+endif
+
+SHADERGEN_SRCS += $(filter-out $(MALI400_COMMON_NOT_IN_SHADERGEN), $(MALI400_COMPILER_COMMON_TEST_SRCS) $(MALI400_COMPILER_COMMON_NOTEST_SRCS))
+
+
+MALI400_COMPILER_SRCS += $(MALI400_COMPILER_COMMON_TEST_SRCS) $(MALI400_COMPILER_COMMON_NOTEST_SRCS)
+MALI400_COMPILER_DEBUG_SRCS += $(MALI400_COMPILER_COMMON_DEBUG_SRCS)
+TEST_SRCS += $(MALI400_COMPILER_COMMON_TEST_SRCS)

@@ -1,0 +1,34 @@
+#
+# Copyright (C) 2010, 2012 ARM Limited. All rights reserved.
+# 
+# This program is free software and is provided to you under the terms of the GNU General Public License version 2
+# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# 
+# A copy of the licence is included with the program, and can also be obtained from Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+MALI400_COMPILER_FRONTEND_DIR ?= .
+
+
+MALI400_FRONTEND_SRCS = \
+	$(MALI400_COMPILER_FRONTEND_DIR)/scanner.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/parser.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/frontend.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/constant_fold.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/typecheck.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/preprocessor.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/lang.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/callgraph.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/precision.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/global_variable_inlining.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/data_type.c
+
+MALI400_FRONTEND_NOTEST_SRCS = \
+	$(MALI400_COMPILER_FRONTEND_DIR)/frontend.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/lang.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/precision.c \
+	$(MALI400_COMPILER_FRONTEND_DIR)/global_variable_inlining.c
+
+MALI400_COMPILER_SRCS += $(MALI400_FRONTEND_SRCS)
+TEST_SRCS += $(filter-out $(MALI400_FRONTEND_NOTEST_SRCS),$(MALI400_FRONTEND_SRCS))

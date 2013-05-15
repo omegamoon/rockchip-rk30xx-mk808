@@ -24,7 +24,8 @@ source "drivers/gpu/drm/Kconfig"
 source "drivers/gpu/stub/Kconfig"
 
 source "drivers/gpu/ion/Kconfig"
-
+# Omegamoon >> Added mali support
+source "drivers/gpu/mali/Kconfig"
 config VGASTATE
        tristate
        default n

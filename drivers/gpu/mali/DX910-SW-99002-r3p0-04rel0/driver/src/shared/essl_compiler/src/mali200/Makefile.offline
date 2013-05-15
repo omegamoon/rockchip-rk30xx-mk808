@@ -1,0 +1,55 @@
+#
+# Copyright (C) 2010, 2012 ARM Limited. All rights reserved.
+# 
+# This program is free software and is provided to you under the terms of the GNU General Public License version 2
+# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# 
+# A copy of the licence is included with the program, and can also be obtained from Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+MALI400_COMPILER_MALI200_DIR ?= .
+
+
+MALI400_MALI200_SRCS = \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_target.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_type.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_preschedule.rw \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_driver.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_scheduler.rw \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_instruction.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_slot.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_liveness.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_word_splitting.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_regalloc.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_register_integration.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_spilling.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_word_insertion.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_emit.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_entry_point.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_relocation.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_external_implementation.c
+
+MALI400_MALI200_DEBUG_SRCS =
+
+ifeq ($(DEBUGPRINT),1)
+MALI400_MALI200_DEBUG_SRCS += \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_printer.c
+endif
+
+MALI400_MALI200_TEST_SRCS = \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_emit.c
+
+MALI400_MALI200_NOT_IN_SHADERGEN = \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_entry_point.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_target.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_preschedule.c \
+	$(MALI400_COMPILER_MALI200_DIR)/mali200_driver.c
+
+
+SHADERGEN_SRCS += $(filter-out $MALI400_(MALI200_NOT_IN_SHADERGEN), $(MALI400_MALI200_SRCS))
+
+MALI400_COMPILER_SRCS += $(MALI400_MALI200_SRCS)
+MALI400_COMPILER_DEBUG_SRCS += $(MALI400_MALI200_DEBUG_SRCS)
+TEST_SRCS += $(MALI400_MALI200_TEST_SRCS)
+
