@@ -434,3 +434,7 @@ config SND_SOC_WM9090
 config SND_SOC_RK2928
 	tristate
 	depends on ARCH_RK2928
+
+# Omegamoon >> Added for HDMI sound support
+config SND_SOC_RK_HDMI_CODEC
+	tristate
