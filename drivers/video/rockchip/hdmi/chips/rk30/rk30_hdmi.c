@@ -128,8 +128,8 @@ static int __devinit rk30_hdmi_probe (struct platform_device *pdev)
 		ret = -ENXIO;
 		goto err0;
 	}
-	hdmi->xscale = 95;
-	hdmi->yscale = 95;
+	hdmi->xscale = 100;
+	hdmi->yscale = 100;
 	
 	hdmi->hclk = clk_get(NULL,"hclk_hdmi");
 	if(IS_ERR(hdmi->hclk))

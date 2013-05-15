@@ -88,6 +88,18 @@ config LCD_HDMI_800x480
 	bool "RGB Hannstar LCD_HDMI_800x480"
 	---help---
 	if support RK610, this setting can support dual screen output
+config BOX_FB_480P
+	bool "ITV framebuffer size and timing is 480P"
+	---help---
+	For itv box, default framebuffer size and timing as 720x480p-60 if you say yes."
+config BOX_FB_720P
+	bool "ITV framebuffer size and timing is 720P"
+	---help---
+	For itv box, default framebuffer size and timing as 1280x720p-60 if you say yes."
+config BOX_FB_1080P
+	bool "ITV framebuffer size and timing is 1080P"
+	---help---
+	For itv box, default framebuffer size and timing as 1920x1080p-60 if you say yes."
 config LCD_HV070WSA100
 	bool "HV070WSA-100 1024X600"
 config LCD_COMMON
