@@ -30,6 +30,8 @@ obj-$(CONFIG_MAG_SENSORS)	+= magnetometer/
 
 obj-$(CONFIG_SENSOR_DEVICE)	+= sensors/
 obj-$(CONFIG_TS_AUTO)	+= ts/
+# Omegamoon >> Added remotectl
+obj-$(CONFIG_RK_REMOTECTL)      += remotectl/
 
 obj-$(CONFIG_INPUT_APMPOWER)	+= apm-power.o
 obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o

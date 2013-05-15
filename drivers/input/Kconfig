@@ -198,6 +198,8 @@ source "drivers/input/lightsensor/Kconfig"
 
 source "drivers/input/sensors/Kconfig"
 
+# Omegamoon >> Added remotectl
+source "drivers/input/remotectl/Kconfig"
 endif
 
 menu "Hardware I/O ports"
