@@ -26,6 +26,8 @@
 #include <mach/iomux.h>
 #include <plat/rk_fiq_debugger.h>
 
+#define OMEGAMOON_CHANGED	1
+
 #ifdef CONFIG_ADC_RK30
 static struct resource rk30_adc_resource[] = {
 	{
@@ -1350,7 +1352,12 @@ static int __init rk30_init_devices(void)
 #endif
 	rk30_init_sdmmc();
 #if defined(CONFIG_FIQ_DEBUGGER) && defined(DEBUG_UART_PHYS)
-	//rk_serial_debug_init(DEBUG_UART_BASE, IRQ_DEBUG_UART, IRQ_UART_SIGNAL, -1);
+#ifdef OMEGAMOON_CHANGED
+	// Initialize serial here in order to prevent console from being disabled during boot
+	rk_serial_debug_init(DEBUG_UART_BASE, IRQ_DEBUG_UART, IRQ_UART_SIGNAL, -1);
+#else
+  //rk_serial_debug_init(DEBUG_UART_BASE, IRQ_DEBUG_UART, IRQ_UART_SIGNAL, -1);
+#endif // OMEGAMOON_CHANGED
 #endif
 	rk30_init_i2s();
 #ifdef CONFIG_RK29_VMAC
