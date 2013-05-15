@@ -49,6 +49,8 @@ config MACH_RK30_DS1001B
      
 config MACH_RK30_PHONE
 	bool "RK30 smart phone board"
+config MACH_RK30_OMEGAMOON
+	bool "RK30 board - Customized by Omegamoon"
 
 config MACH_RK30_PHONE_LOQUAT
 	bool "RK30 smart phone loquat board"
