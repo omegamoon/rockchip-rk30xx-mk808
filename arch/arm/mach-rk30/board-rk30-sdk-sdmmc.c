@@ -12,6 +12,8 @@
  * GNU General Public License for more details.
  *
  */
+#include <asm/io.h>
+#include <mach/board.h>
 
 #ifdef CONFIG_SDMMC_RK29
 
@@ -76,7 +78,7 @@ static void rk29_sdmmc_gpio_open(int device_id, int on)
                 gpio_direction_output(RK30_PIN3_PC1,GPIO_HIGH);//set mmc1-data0 to high.
                 gpio_direction_output(RK30_PIN3_PC2,GPIO_HIGH);//set mmc1-data1 to high.
                 gpio_direction_output(RK30_PIN3_PC3,GPIO_HIGH);//set mmc1-data2 to high.
-                gpio_direction_output(RK30_PIN3_PC5,GPIO_HIGH);//set mmc1-data3 to high.
+                gpio_direction_output(RK30_PIN3_PC4,GPIO_HIGH);//set mmc1-data3 to high.
                 mdelay(100);
             }
             else
@@ -302,11 +304,36 @@ static int rk29sdk_wifi_status_register(void (*callback)(int card_present, void 
         return 0;
 }
 
+#define write_pwm_reg(id, addr, val)        __raw_writel(val, addr+(RK30_PWM01_BASE+(id>>1)*0x20000)+id*0x10)
+#define read_pwm_reg(id, addr)              __raw_readl(addr+(RK30_PWM01_BASE+(id>>1)*0x20000+id*0x10))
+#define PWM_REG_CNTR         0x00
+#define PWM_REG_HRC          0x04 
+#define PWM_REG_LRC          0x08
+#define PWM_REG_CTRL         0x0c
+#define PWM_ENABLE          (1<<3)
+#define PWM_TIME_EN         (1)
+#define PWM_RESET           (1<<7)
 static int __init rk29sdk_wifi_bt_gpio_control_init(void)
 {
     rk29sdk_init_wifi_mem();
     
     rk29_mux_api_set(GPIO3D0_SDMMC1PWREN_NAME, GPIO3D_GPIO3D0);
+    rk29_mux_api_set(GPIO0D6_PWM2_NAME, 1);
+    struct clk *pwm_clk = clk_get(NULL, "pwm23");
+    clk_enable(pwm_clk);
+    printk("pwmreg1:%d\r\n", read_pwm_reg(2, PWM_REG_CTRL));
+    printk("pwmreg2:%d\r\n", read_pwm_reg(2, PWM_REG_LRC));
+    printk("pwmreg3:%d\r\n", read_pwm_reg(2, PWM_REG_HRC));
+    printk("pwmreg4:%d\r\n", read_pwm_reg(2, PWM_REG_CNTR));
+    write_pwm_reg(2, PWM_REG_CTRL, PWM_RESET);
+    write_pwm_reg(2, PWM_REG_LRC, 1132);
+    write_pwm_reg(2, PWM_REG_HRC, 566);
+    write_pwm_reg(2, PWM_REG_CNTR, 839);
+    write_pwm_reg(2, PWM_REG_CTRL, PWM_ENABLE|PWM_TIME_EN);
+    printk("pwmreg1:%d\r\n", read_pwm_reg(2, PWM_REG_CTRL));
+    printk("pwmreg2:%d\r\n", read_pwm_reg(2, PWM_REG_LRC));
+    printk("pwmreg3:%d\r\n", read_pwm_reg(2, PWM_REG_HRC));
+    printk("pwmreg4:%d\r\n", read_pwm_reg(2, PWM_REG_CNTR));
     
     if (gpio_request(RK30SDK_WIFI_GPIO_POWER_N, "wifi_power")) {
            pr_info("%s: request wifi power gpio failed\n", __func__);
